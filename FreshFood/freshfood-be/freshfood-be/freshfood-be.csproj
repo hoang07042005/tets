@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>freshfood_be</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.6" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.0-preview.1.25081.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0-preview.1.25081.1" />
+    <PackageReference Include="MailKit" Version="4.13.0" />
+    <PackageReference Include="System.Resources.Extensions" Version="9.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
+  </ItemGroup>
+
+  <!-- Exclude old ASP.NET WebForms VNPay demo from build -->
+  <ItemGroup>
+    <Compile Remove="vnpay_cs\**\*.cs" />
+    <Content Remove="vnpay_cs\**\*" />
+    <EmbeddedResource Remove="vnpay_cs\**\*" />
+    <None Remove="vnpay_cs\**\*" />
+  </ItemGroup>
+
+  <!-- Exclude MoMo sample projects (WinForms / netcoreapp3.1) from build -->
+  <ItemGroup>
+    <Compile Remove="momo_cs\**\*.cs" />
+    <Content Remove="momo_cs\**\*" />
+    <EmbeddedResource Remove="momo_cs\**\*" />
+    <None Remove="momo_cs\**\*" />
+  </ItemGroup>
+
+</Project>

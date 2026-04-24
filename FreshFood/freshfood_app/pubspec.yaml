@@ -1,0 +1,52 @@
+name: freshfood_app
+description: "A new Flutter project."
+publish_to: 'none' 
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.6.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  http: ^1.2.2
+  http_parser: ^4.1.0
+  cached_network_image: ^3.4.1
+  intl: ^0.19.0
+  shared_preferences: ^2.3.2
+  image_picker: ^1.1.2
+  flutter_html: ^3.0.0-beta.2
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  url_launcher: ^6.3.2
+  app_links: ^6.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/freshfood-app.png"
+  adaptive_icon_foreground: "assets/freshfood-app.png"
+  adaptive_icon_background: "#FFFFFF"
+
+flutter:
+
+  uses-material-design: true
+
+  assets:
+    - assets/Onboarding.png
+    - assets/freshfood-app.png
+    - assets/payments/logo-COD.png
+    - assets/payments/vnpay-logo.png
+    - assets/payments/logo-momo.png

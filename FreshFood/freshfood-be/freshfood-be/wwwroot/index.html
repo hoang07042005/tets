@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FreshFood — Backend đã khởi động</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    /* Khớp freshfood-fe/src/index.css — .logo, .logo-icon, :root */
+    :root {
+      --primary: #2ecc71;
+      --primary-dark: #27ae60;
+      --text: #2c3e50;
+      --text-light: #7f8c8d;
+      --bg: #ffffff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.75rem;
+      line-height: 1.6;
+    }
+    .card {
+      text-align: center;
+      max-width: 26rem;
+      width: 100%;
+    }
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: -0.02em;
+    }
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+    .ok {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 3.25rem;
+      height: 3.25rem;
+      margin-bottom: 1.1rem;
+      border-radius: 50%;
+      background: rgba(46, 204, 113, 0.15);
+      color: var(--primary);
+      font-size: 1.5rem;
+      font-weight: 800;
+    }
+    h1 {
+      font-family: "Outfit", "Plus Jakarta Sans", system-ui, sans-serif;
+      font-size: 1.2rem;
+      font-weight: 800;
+      line-height: 1.35;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      margin-bottom: 0.75rem;
+    }
+    p {
+      font-size: 0.95rem;
+      font-weight: 600;
+      line-height: 1.55;
+      color: var(--text-light);
+    }
+    p strong {
+      color: var(--primary);
+      font-weight: 700;
+    }
+    .hint {
+      margin-top: 1.25rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-light);
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <!-- Cùng Lucide Leaf + chữ như Header.tsx / Footer.tsx -->
+    <div class="logo" aria-label="FreshFood">
+      <svg
+        class="logo-icon"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
+        <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
+      </svg>
+      <span>FreshFood</span>
+    </div>
+    <div class="ok" aria-hidden="true">✓</div>
+    <h1>Backend đã khởi động thành công</h1>
+    <p>
+      Máy chủ API <strong>FreshFood</strong> đang chạy ổn định và sẵn sàng nhận yêu cầu từ ứng dụng hoặc các dịch vụ khác.
+    </p>
+    <p class="hint">Bạn có thể đóng tab này và tiếp tục làm việc trên giao diện hoặc công cụ gọi API.</p>
+  </main>
+</body>
+</html>
