@@ -2,7 +2,7 @@ class ApiConfig {
   static const String apiOrigin = String.fromEnvironment(
     'API_ORIGIN',
     // defaultValue: 'https://resale-relapsing-darkening.ngrok-free.dev',
-    defaultValue: 'http://192.168.24.18:5013',
+    defaultValue: 'https://tets-1-c1v4.onrender.com',
   );
 
   static const String apiBaseUrl = '$apiOrigin/api';

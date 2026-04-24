@@ -5,6 +5,9 @@ cd freshfood-fe
 npm run dev
 
 
+cd d:\freshfood-be\freshfood-be
+
+
 
 ngrok http 5013
 ngrok http --domain=resale-relapsing-darkening.ngrok-free.dev 5013
