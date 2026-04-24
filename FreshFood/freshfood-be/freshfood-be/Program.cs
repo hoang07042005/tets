@@ -34,7 +34,11 @@ builder.Services.AddDbContext<FreshFoodContext>(options =>
     {
         var databaseUri = new Uri(finalConn);
         var userInfo = databaseUri.UserInfo.Split(':');
-        finalConn = $"Host={databaseUri.Host};Port={databaseUri.Port};Database={databaseUri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
+        var host = databaseUri.Host;
+        var port = databaseUri.Port <= 0 ? 5432 : databaseUri.Port; // Nếu không có port thì mặc định 5432
+        var database = databaseUri.AbsolutePath.TrimStart('/');
+        
+        finalConn = $"Host={host};Port={port};Database={database};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
     }
     
     if (string.IsNullOrEmpty(finalConn)) {
