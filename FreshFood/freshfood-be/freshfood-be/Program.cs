@@ -19,24 +19,28 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 var connectionString = builder.Configuration.GetConnectionString("FreshFoodConnection");
+Console.WriteLine($"[DEBUG] ConnectionString from Config: {(string.IsNullOrEmpty(connectionString) ? "NULL" : "FOUND")}");
 
-// Nếu GetConnectionString trả về null, thử lấy trực tiếp từ biến môi trường
 if (string.IsNullOrEmpty(connectionString))
 {
     connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__FreshFoodConnection");
+    Console.WriteLine($"[DEBUG] ConnectionString from Env: {(string.IsNullOrEmpty(connectionString) ? "NULL" : "FOUND")}");
 }
 
 builder.Services.AddDbContext<FreshFoodContext>(options =>
 {
-    // Kiểm tra nếu là định dạng postgres:// của Render thì phải convert sang định dạng .NET hiểu
-    if (!string.IsNullOrEmpty(connectionString) && connectionString.StartsWith("postgres://"))
+    var finalConn = connectionString;
+    if (!string.IsNullOrEmpty(finalConn) && finalConn.StartsWith("postgres://"))
     {
-        var databaseUri = new Uri(connectionString);
+        var databaseUri = new Uri(finalConn);
         var userInfo = databaseUri.UserInfo.Split(':');
-        connectionString = $"Host={databaseUri.Host};Port={databaseUri.Port};Database={databaseUri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
+        finalConn = $"Host={databaseUri.Host};Port={databaseUri.Port};Database={databaseUri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
     }
     
-    options.UseNpgsql(connectionString);
+    if (string.IsNullOrEmpty(finalConn)) {
+        Console.WriteLine("[ERROR] FINAL CONNECTION STRING IS EMPTY!");
+    }
+    options.UseNpgsql(finalConn);
 });
 
 
