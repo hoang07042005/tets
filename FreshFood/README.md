@@ -12,6 +12,8 @@ ngrok http --domain=resale-relapsing-darkening.ngrok-free.dev 5013
 thay ip  192.168.24.18:5013  thành https://resale-relapsing-darkening.ngrok-free.dev
 
 
+ "FreshFoodConnection": "Server=.\\SQLEXPRESS;Database=FreshFoodDB;Trusted_Connection=True;TrustServerCertificate=True;"
+
 
 test momo  
 Số thẻ: 9704 0000 0000 0018  
