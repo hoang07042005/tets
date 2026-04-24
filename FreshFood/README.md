@@ -5,7 +5,7 @@ cd freshfood-fe
 npm run dev
 
 
-cd d:\freshfood-be\freshfood-be
+cd d:\freshfood\freshfood-be\freshfood-be
 
 
 
