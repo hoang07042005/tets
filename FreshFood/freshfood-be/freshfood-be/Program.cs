@@ -30,7 +30,7 @@ if (string.IsNullOrEmpty(connectionString))
 builder.Services.AddDbContext<FreshFoodContext>(options =>
 {
     var finalConn = connectionString;
-    if (!string.IsNullOrEmpty(finalConn) && finalConn.StartsWith("postgres://"))
+    if (!string.IsNullOrEmpty(finalConn) && (finalConn.StartsWith("postgres://") || finalConn.StartsWith("postgresql://")))
     {
         var databaseUri = new Uri(finalConn);
         var userInfo = databaseUri.UserInfo.Split(':');
