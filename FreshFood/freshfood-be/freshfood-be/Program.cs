@@ -18,8 +18,26 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+var connectionString = builder.Configuration.GetConnectionString("FreshFoodConnection");
+
+// Nếu GetConnectionString trả về null, thử lấy trực tiếp từ biến môi trường
+if (string.IsNullOrEmpty(connectionString))
+{
+    connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__FreshFoodConnection");
+}
+
 builder.Services.AddDbContext<FreshFoodContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("FreshFoodConnection")));
+{
+    // Kiểm tra nếu là định dạng postgres:// của Render thì phải convert sang định dạng .NET hiểu
+    if (!string.IsNullOrEmpty(connectionString) && connectionString.StartsWith("postgres://"))
+    {
+        var databaseUri = new Uri(connectionString);
+        var userInfo = databaseUri.UserInfo.Split(':');
+        connectionString = $"Host={databaseUri.Host};Port={databaseUri.Port};Database={databaseUri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
+    }
+    
+    options.UseNpgsql(connectionString);
+});
 
 
 builder.Services.AddControllers()
