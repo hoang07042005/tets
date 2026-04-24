@@ -1,0 +1,25 @@
+# .NET specific
+bin/
+obj/
+out/
+publish/
+
+# IDE specific
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Secrets and configs
+appsettings.Development.json
+*.db
+*.sqlite
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Logs
+*.log
