@@ -17,6 +17,9 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Thêm dòng này để fix lỗi DateTime với PostgreSQL
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 // Add services to the container.
 var connectionString = builder.Configuration.GetConnectionString("FreshFoodConnection");
 Console.WriteLine($"[DEBUG] ConnectionString from Config: {(string.IsNullOrEmpty(connectionString) ? "NULL" : "FOUND")}");

@@ -1,6 +1,6 @@
 import { Product, Category, RecentReview, ReviewSummary, Order, WishlistItem, Voucher, AdminDashboardDto, AdminLowStockProduct, AdminRecentImport, AdminSuppliersPage, AdminSupplierRow, AdminProductsPage, AdminUsersPage, AdminUserRow, AdminContactMessagesPage, AdminContactMessageDetail, AdminOrdersPage, AdminOrderDetail, ShippingMethod, ReturnRequest, BlogPost, BlogComment, ServerCartDto, UserAddress, PublicOrderTrack, HomePageSettings } from '../types';
 
-export const API_ORIGIN = 'http://localhost:5013';
+export const API_ORIGIN = 'https://tets-1-c1v4.onrender.com';
 const API_BASE_URL = `${API_ORIGIN}/api`;
 const AUTH_STORAGE_KEY = 'freshfood_auth';
 const baseFetch: typeof globalThis.fetch = globalThis.fetch.bind(globalThis);
