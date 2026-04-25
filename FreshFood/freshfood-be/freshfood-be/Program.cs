@@ -196,4 +196,22 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+
+// --- TỰ ĐỘNG KHỞI TẠO DATABASE ---
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<FreshFoodContext>();
+        Console.WriteLine("[INFO] Ensuring database schema exists...");
+        context.Database.EnsureCreated(); // Tự động tạo bảng nếu chưa có
+        Console.WriteLine("[INFO] Database schema is ready.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[ERROR] An error occurred during database initialization: {ex.Message}");
+    }
+}
+
 app.Run();
