@@ -17,9 +17,10 @@ RUN dotnet publish "freshfood-be.csproj" -c Release -o /app/publish /p:UseAppHos
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-# Set environment variable to listen on port 5013
-ENV ASPNETCORE_URLS=http://+:5013
-EXPOSE 5013
+# Render requires port 8080
+ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_ENVIRONMENT=Production
+EXPOSE 8080
 
 # Copy the published output from the build stage
 COPY --from=build /app/publish .
