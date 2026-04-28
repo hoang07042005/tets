@@ -5,7 +5,9 @@ import 'package:freshfood_app/api/api_client.dart';
 import 'package:freshfood_app/config/api_config.dart';
 import 'package:freshfood_app/models/shipping_method.dart';
 import 'package:freshfood_app/models/user_address.dart';
+import 'package:freshfood_app/models/voucher.dart';
 import 'package:freshfood_app/screens/account/auth/auth_forgot_password_screen.dart';
+import 'package:freshfood_app/screens/account/auth/auth_login_screen.dart';
 import 'package:freshfood_app/screens/account/auth/auth_register_screen.dart';
 import 'package:freshfood_app/state/auth_state.dart';
 import 'package:freshfood_app/state/cart_state.dart';
@@ -45,6 +47,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _voucherCtl = TextEditingController();
   ValidateVoucherResult? _voucherApplied;
   String? _voucherErr;
+  bool _voucherApplying = false;
+  List<Voucher> _activeVouchers = const [];
 
   @override
   void initState() {
@@ -71,17 +75,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final results = await Future.wait([
         _api.getShippingMethods(),
         if (user != null) _api.getUserAddresses(user.userId) else Future.value(const <UserAddress>[]),
+        if (user != null) _api.getActiveVouchers(userId: user.userId) else Future.value(const <Voucher>[]),
       ]);
       if (!mounted) return;
 
       final sms = results[0] as List<ShippingMethod>;
       final addrs = results[1] as List<UserAddress>;
+      final vouchers = results[2] as List<Voucher>;
 
       _shippingMethods = sms;
       _shippingMethodId = (_shippingMethodId ?? (sms.isNotEmpty ? sms.first.methodId : null));
 
       if (user != null) {
         _savedAddresses = addrs;
+        _activeVouchers = vouchers;
         if (addrs.isNotEmpty) {
           final def = addrs.firstWhere((a) => a.isDefault, orElse: () => addrs.first);
           _addressSource = 'saved';
@@ -97,6 +104,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         }
       } else {
         _savedAddresses = const [];
+        _activeVouchers = const [];
         _addressSource = 'custom';
         _selectedAddressId = null;
       }
@@ -104,8 +112,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
       _err = e.toString();
     } finally {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -155,6 +162,32 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final user = AuthState.currentUser.value;
     if (user == null) {
       setState(() => _voucherErr = 'Đăng nhập để áp dụng voucher.');
+      // Offer quick navigation to auth screens, similar to web behavior.
+      // ignore: discarded_futures
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cần đăng nhập', style: TextStyle(fontWeight: FontWeight.w900)),
+          content: const Text('Bạn cần đăng nhập để áp dụng voucher.', style: TextStyle(fontWeight: FontWeight.w700)),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Để sau')),
+            OutlinedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AuthLoginScreen()));
+              },
+              child: const Text('Đăng nhập'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AuthRegisterScreen()));
+              },
+              child: const Text('Đăng ký'),
+            ),
+          ],
+        ),
+      );
       return;
     }
     final code = _voucherCtl.text.trim();
@@ -166,6 +199,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       setState(() {
         _voucherErr = null;
         _voucherApplied = null;
+        _voucherApplying = true;
       });
       final res = await _api.validateVoucher(userId: user.userId, code: code, subtotal: _subtotal, shipping: _shippingCost);
       if (!mounted) return;
@@ -173,7 +207,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _voucherErr = e.toString());
+    } finally {
+      if (mounted) setState(() => _voucherApplying = false);
     }
+  }
+
+  void _removeVoucher() {
+    setState(() {
+      _voucherApplied = null;
+      _voucherErr = null;
+      _voucherCtl.clear();
+    });
   }
 
   Future<void> _placeOrder() async {
@@ -218,7 +262,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       });
 
       final res = await _api.createOrder(
-        userId: isAuthed ? u!.userId : null,
+        userId: isAuthed ? u.userId : null,
         guestCheckout: isAuthed ? null : GuestCheckoutDraft(fullName: fullName, email: email, phone: phone),
         shippingAddress: shippingText,
         shippingAddressId: (!needManual && isAuthed) ? _selectedAddressId : null,
@@ -293,8 +337,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       setState(() => _err = e.toString());
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_err!)));
     } finally {
-      if (!mounted) return;
-      setState(() => _placing = false);
+      if (mounted) setState(() => _placing = false);
     }
   }
 
@@ -400,6 +443,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   voucherCtl: _voucherCtl,
                   voucherErr: _voucherErr,
                   onApplyVoucher: _applyVoucher,
+                  onRemoveVoucher: _removeVoucher,
+                  voucherApplying: _voucherApplying,
+                  activeVouchers: _activeVouchers,
+                  isAuthed: user != null,
                   grandTotal: _grandTotal,
                   placing: _placing,
                   onPlaceOrder: _placeOrder,
@@ -855,6 +902,10 @@ class _CheckoutSummary extends StatelessWidget {
   final TextEditingController voucherCtl;
   final String? voucherErr;
   final VoidCallback onApplyVoucher;
+  final VoidCallback onRemoveVoucher;
+  final bool voucherApplying;
+  final List<Voucher> activeVouchers;
+  final bool isAuthed;
   final num grandTotal;
   final VoidCallback onPlaceOrder;
   final bool placing;
@@ -871,6 +922,10 @@ class _CheckoutSummary extends StatelessWidget {
     required this.voucherCtl,
     required this.voucherErr,
     required this.onApplyVoucher,
+    required this.onRemoveVoucher,
+    required this.voucherApplying,
+    required this.activeVouchers,
+    required this.isAuthed,
     required this.grandTotal,
     required this.onPlaceOrder,
     required this.placing,
@@ -958,7 +1013,7 @@ class _CheckoutSummary extends StatelessWidget {
               SizedBox(
                 height: 46,
                 child: ElevatedButton(
-                  onPressed: onApplyVoucher,
+                  onPressed: (voucherApplying || !isAuthed) ? null : onApplyVoucher,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _CheckoutScreenState._primary,
                     foregroundColor: Colors.white,
@@ -967,14 +1022,56 @@ class _CheckoutSummary extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     textStyle: const TextStyle(fontWeight: FontWeight.w900),
                   ),
-                  child: const Text('Áp dụng'),
+                  child: voucherApplying
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Áp dụng'),
                 ),
               ),
             ],
           ),
+          if (!isAuthed) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Bạn cần đăng nhập để áp dụng voucher.',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+            ),
+          ],
+          if (activeVouchers.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final v in activeVouchers.take(12)) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ActionChip(
+                        label: Text(v.code, style: const TextStyle(fontWeight: FontWeight.w900)),
+                        onPressed: () {
+                          voucherCtl.text = v.code;
+                          onApplyVoucher();
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           if (voucherErr != null) ...[
             const SizedBox(height: 8),
             Text(voucherErr!, style: theme.textTheme.bodyMedium?.copyWith(color: const Color(0xFFB91C1C), fontWeight: FontWeight.w800)),
+          ],
+          if (voucherApplied != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onRemoveVoucher,
+                icon: const Icon(Icons.close_rounded, size: 18),
+                label: const Text('Gỡ voucher', style: TextStyle(fontWeight: FontWeight.w900)),
+              ),
+            ),
           ],
           const SizedBox(height: 14),
           SizedBox(

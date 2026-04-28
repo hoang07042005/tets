@@ -430,121 +430,206 @@ class _HeroSection extends StatelessWidget {
     final highlight = hero?.highlight?.trim().isNotEmpty == true ? hero!.highlight!.trim() : 'cuộc sống xanh';
     final subtitle = hero?.subtitle?.trim().isNotEmpty == true
         ? hero!.subtitle!.trim()
-        : 'Mang tinh hoa của đất mẹ đến bàn ăn gia đình bạn. Tươi mới, an toàn và bền vững.';
+        : 'Mang tinh hoa của đất mẹ đến bàn ăn gia đình bạn. Chúng tôi cam kết 100% hữu cơ, tươi mới và canh tác bền vững.';
     final imageUrl = ApiConfig.resolveMediaUrl(
-      hero?.imageUrl ??
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuAn0_mNhh8RAPtDRh5dXiS0PwqdeokDtFRsYYdHuwNzUd8DUP-XK0LCy3fRsasW6dte8-HP5n76MS78rIwCFlIXB_KoyZHUcublemfM8U8s7E-DaT3kwb8Rf-aUW6_ffI3mA1DBRY8A1prT7MxWir9RavBVLMd5uwlQbf2244qVhU9tRG5QKHw5liPbu7L1kboFE0LcFFVg3M20VNc2Z_BT8h-MijK_VjDfGHRrclE6pjmN0dn1X4iVzSCCAvJ7wP8rqExns9kIZA8',
+      hero?.imageUrl 
     );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: AspectRatio(
-            // Reduce hero height (less tall than 4/5)
-            aspectRatio: 16 / 13,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                CachedNetworkImage(
-                  imageUrl: imageUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(color: theme.colorScheme.surfaceContainerHighest),
-                  errorWidget: (_, __, ___) => Container(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    child: const Icon(Icons.broken_image),
-                  ),
-                ),
-                // Light overlay for readability
-                Container(
+        Container(
+          constraints: const BoxConstraints(minHeight: 170),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              colors: [Color(0xFFEBF6E8), Colors.white],
+              stops: [0.35, 0.85],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF62BF39).withValues(alpha: 0.15),
+                blurRadius: 15,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              // Background decoration
+              Positioned(
+                top: -20,
+                right: 40,
+                child: Container(
+                  width: 80,
+                  height: 80,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        const Color(0xFF0B2A12).withValues(alpha: 0.22),
-                        const Color(0xFF1B5E20).withValues(alpha: 0.10),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.55, 1.0],
-                    ),
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.2),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Spacer(),
-                      Text(eyebrow, style: theme.textTheme.labelMedium?.copyWith(color: Colors.white70)),
-                      const SizedBox(height: 10),
-                      Text.rich(
-                        TextSpan(
+              ),
+              Positioned(
+                bottom: -30,
+                left: -10,
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
+                ),
+              ),
+              // Faded Image on the Right
+              Positioned.fill(
+                child: Row(
+                  children: [
+                    const Spacer(flex: 40),
+                    Expanded(
+                      flex: 60,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+                        child: Stack(
+                          fit: StackFit.expand,
                           children: [
-                            TextSpan(
-                              text: '$title\n',
-                              style: const TextStyle(color: Colors.white),
+                            CachedNetworkImage(
+                              imageUrl: imageUrl,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.centerRight,
+                              placeholder: (_, __) => const SizedBox(),
+                              errorWidget: (_, __, ___) => const SizedBox(),
                             ),
-                            TextSpan(
-                              text: highlight,
-                              style: const TextStyle(color: Color(0xFF62BF39)),
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                  colors: [
+                                    const Color(0xFFEBF6E8),
+                                    const Color(0xFFEBF6E8).withValues(alpha: 0.0),
+                                  ],
+                                  stops: const [0.25, 0.8],
+                                ),
+                              ),
                             ),
                           ],
                         ),
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          height: 1.08,
-                          fontSize: 30,
-                        ),
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        subtitle,
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white, height: 1.3),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
+                    ),
+                  ],
+                ),
+              ),
+              // Content on the Left
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 75,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          FilledButton(
-                            onPressed: () {
-                              final href = hero?.primaryCtaHref?.trim() ?? '';
-                              // For now we map common web hrefs to tabs.
-                              if (href == '/products') {
-                                NavState.tabIndex.value = 1;
-                                return;
-                              }
-                              // Default action: go to Products tab.
-                              NavState.tabIndex.value = 1;
-                            },
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF62BF39),
-                              foregroundColor: Colors.white,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Text(hero?.primaryCtaText?.trim().isNotEmpty == true ? hero!.primaryCtaText!.trim() : 'Khám phá ngay'),
+                            child: Text(
+                              eyebrow.toUpperCase(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF2E7D32),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                           ),
-                          const SizedBox(width: 10),
-                          OutlinedButton(
-                            onPressed: () {},
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              side: BorderSide(color: Colors.white.withValues(alpha: 0.7)),
+                          const SizedBox(height: 10),
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(text: '$title\n', style: const TextStyle(color: Color(0xFF1F2937))),
+                                TextSpan(text: highlight, style: const TextStyle(color: Color(0xFF62BF39))),
+                              ],
                             ),
-                            child: Text(hero?.secondaryCtaText?.trim().isNotEmpty == true ? hero!.secondaryCtaText!.trim() : 'View Story'),
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              height: 1.15,
+                              fontSize: 20,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            subtitle,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: const Color(0xFF4B5563),
+                              height: 1.3,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              FilledButton(
+                                onPressed: () {
+                                  final href = hero?.primaryCtaHref?.trim() ?? '';
+                                  if (href == '/products') {
+                                    NavState.tabIndex.value = 1;
+                                    return;
+                                  }
+                                  NavState.tabIndex.value = 1;
+                                },
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF62BF39),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 0),
+                                  minimumSize: const Size(0, 38),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  elevation: 0,
+                                ),
+                                child: Text(
+                                  hero?.primaryCtaText?.trim().isNotEmpty == true ? hero!.primaryCtaText!.trim() : 'Khám phá',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                              FilledButton(
+                                onPressed: () {},
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFFF6D4BA),
+                                  foregroundColor: const Color(0xFF1F2937),
+                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 0),
+                                  minimumSize: const Size(0, 38),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  elevation: 0,
+                                ),
+                                child: const Text(
+                                  'View Story',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                    // Empty space to let the image show through
+                    const Spacer(flex: 25),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         Row(
           children: [
             Expanded(
@@ -554,7 +639,7 @@ class _HeroSection extends StatelessWidget {
                 sub: hero?.feature1Sub?.trim().isNotEmpty == true ? hero!.feature1Sub!.trim() : 'Nhanh chóng & tiện lợi',
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: _FeaturePill(
                 icon: Icons.verified_user_outlined,
@@ -580,24 +665,38 @@ class _FeaturePill extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        // No border; softer background.
-        color: const Color(0xFF62BF39).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: theme.colorScheme.primary),
-          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF62BF39).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 20, color: const Color(0xFF62BF39)),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w800, fontSize: 13)),
                 const SizedBox(height: 2),
-                Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+                Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
               ],
             ),
           ),
