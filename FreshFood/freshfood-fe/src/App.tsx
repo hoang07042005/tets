@@ -34,6 +34,8 @@ import { PrivacyPolicyPage } from './pages/Legal/PrivacyPolicyPage'
 import { SustainabilityPage } from './pages/Home/SustainabilityPage'
 import { AiAssistantPage } from './pages/Ai/AiAssistantPage'
 
+import { useState, useEffect } from 'react';
+
 function AppFrame() {
   const location = useLocation();
   const path = (location.pathname || '').toLowerCase();
@@ -43,6 +45,24 @@ function AppFrame() {
     path === '/forgot-password' ||
     path === '/reset-password' ||
     path === '/tao-mat-khau';
+
+  const [isMaintenance, setIsMaintenance] = useState(false);
+
+  useEffect(() => {
+    const handleMaintenance = () => setIsMaintenance(true);
+    window.addEventListener('maintenance-mode', handleMaintenance);
+    return () => window.removeEventListener('maintenance-mode', handleMaintenance);
+  }, []);
+
+  if (isMaintenance) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', textAlign: 'center', padding: 20, backgroundColor: '#f9fafb' }}>
+        <h1 style={{ fontSize: '2rem', marginBottom: 16, color: '#111827' }}>Hệ thống đang bảo trì</h1>
+        <p style={{ color: '#4b5563', marginBottom: 24, fontSize: '1.1rem' }}>Chúng tôi đang tiến hành nâng cấp hệ thống. Vui lòng quay lại sau.</p>
+        <button onClick={() => window.location.reload()} style={{ padding: '10px 20px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Tải lại trang</button>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">

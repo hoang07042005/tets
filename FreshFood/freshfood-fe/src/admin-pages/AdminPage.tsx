@@ -20,6 +20,7 @@ import { AdminUserListPage } from './users/AdminUserListPage';
 import { AdminContactMessagesListPage } from './contact-messages/AdminContactMessagesListPage';
 import { AdminReviewsPage } from './reviews/AdminReviewsPage';
 import { AdminHomePageSettingsPage } from './home/AdminHomePageSettingsPage';
+import { AdminSystemPage } from './system/AdminSystemPage';
 
 export const AdminPage = () => {
   const { user, isAuthenticated } = useAuth();
@@ -42,6 +43,7 @@ export const AdminPage = () => {
     if (p.startsWith('/admin/reviews')) return 'reviews';
     if (p.startsWith('/admin/contact-messages')) return 'contact-messages';
     if (p.startsWith('/admin/users')) return 'users';
+    if (p.startsWith('/admin/system')) return 'system';
     return 'dashboard';
   }, [location.pathname]);
 
@@ -64,6 +66,7 @@ export const AdminPage = () => {
     else if (next === 'reviews') navigate('/admin/reviews');
     else if (next === 'contact-messages') navigate('/admin/contact-messages');
     else if (next === 'users') navigate('/admin/users');
+    else if (next === 'system') navigate('/admin/system');
   };
 
   const isAdmin = useMemo(() => {
@@ -130,6 +133,8 @@ export const AdminPage = () => {
               <Route path="contact-messages" element={<AdminContactMessagesListPage />} />
 
               <Route path="users" element={<AdminUserListPage />} />
+
+              <Route path="system" element={<AdminSystemPage />} />
 
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </Routes>

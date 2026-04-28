@@ -12,6 +12,7 @@ import {
   FolderTree,
   Users,
   MessageSquare,
+  Settings
 } from 'lucide-react';
 
 export type AdminTabKey =
@@ -25,7 +26,8 @@ export type AdminTabKey =
   | 'home-settings'
   | 'reviews'
   | 'contact-messages'
-  | 'users';
+  | 'users'
+  | 'system';
 
 const productSubs: { key: Extract<AdminTabKey, 'products-list' | 'products-supplier' | 'products-category'>; label: string; Icon: typeof List }[] =
   [
@@ -178,6 +180,16 @@ export function AdminSidebar({ tab, onChange, productsOpen, onProductsOpenChange
         >
           <MessageSquare className="admin-nav-icon" size={20} strokeWidth={1.75} aria-hidden />
           <span className="admin-nav-text">Tin liên hệ</span>
+        </button>
+        <button
+          type="button"
+          className={`admin-nav-item ${tab === 'system' ? 'active' : ''}`}
+          onClick={() => onChange('system')}
+          role="tab"
+          aria-selected={tab === 'system'}
+        >
+          <Settings className="admin-nav-icon" size={20} strokeWidth={1.75} aria-hidden />
+          <span className="admin-nav-text">Hệ thống</span>
         </button>
       </nav>
     </aside>

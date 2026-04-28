@@ -7,6 +7,9 @@ npm run dev
 
 cd d:\freshfood\freshfood-be\freshfood-be
 
+lệnh tạo app apk
+flutter build apk --split-per-abi
+
 
 
 ngrok http 5013

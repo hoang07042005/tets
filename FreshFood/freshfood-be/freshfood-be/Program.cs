@@ -170,6 +170,8 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.UseMiddleware<freshfood_be.Middlewares.MaintenanceMiddleware>();
+
 app.MapControllers();
 
 if (app.Environment.IsDevelopment())

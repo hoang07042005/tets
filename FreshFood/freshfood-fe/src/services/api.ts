@@ -21,10 +21,25 @@ function readAuthToken(): string | null {
 
 async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const token = readAuthToken();
-    if (!token) return baseFetch(input, init);
-    const headers = new Headers(init?.headers || undefined);
-    if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
-    return baseFetch(input, { ...(init || {}), headers });
+    let res: Response;
+    if (!token) {
+        res = await baseFetch(input, init);
+    } else {
+        const headers = new Headers(init?.headers || undefined);
+        if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
+        res = await baseFetch(input, { ...(init || {}), headers });
+    }
+
+    if (res.status === 503) {
+        try {
+            const text = await res.clone().text();
+            if (text.includes('"isMaintenance":true') || text.includes('"isMaintenance": true')) {
+                window.dispatchEvent(new Event('maintenance-mode'));
+            }
+        } catch {}
+    }
+
+    return res;
 }
 
 // Shadow fetch in this module so all existing calls automatically attach JWT when available.
@@ -76,6 +91,21 @@ export function resolveMediaUrl(url?: string | null): string {
 }
 
 export const apiService = {
+    async getAdminMaintenanceStatus(): Promise<{ isMaintenance: boolean }> {
+        const response = await authFetch(`${API_BASE_URL}/Admin/AdminMaintenance`);
+        return response.ok ? response.json() : { isMaintenance: false };
+    },
+
+    async toggleAdminMaintenance(isMaintenance: boolean): Promise<{ isMaintenance: boolean }> {
+        const response = await authFetch(`${API_BASE_URL}/Admin/AdminMaintenance/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isMaintenance }),
+        });
+        if (!response.ok) throw new Error('Cập nhật trạng thái bảo trì thất bại');
+        return await response.json();
+    },
+
     async getHomePageSettings(): Promise<HomePageSettings | null> {
         const response = await fetch(`${API_BASE_URL}/HomePage`);
         return response.ok ? response.json() : null;
