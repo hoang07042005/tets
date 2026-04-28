@@ -415,6 +415,16 @@ class ApiClient {
     return HomePageSettings.fromJson(Map<String, dynamic>.from(body));
   }
 
+  Future<List<Product>> getFeaturedProducts({int take = 8}) async {
+    final safeTake = take < 1 ? 8 : take;
+    final data = await getProductsPaged(
+      sort: 'newest',
+      page: 1,
+      pageSize: safeTake,
+    );
+    return data.items;
+  }
+
   Future<HomePageSettings?> getAdminHomePageSettings() async {
     final res = await _client.get(_u('/Admin/HomePage'), headers: _authHeaders());
     if (res.statusCode < 200 || res.statusCode >= 300) return null;

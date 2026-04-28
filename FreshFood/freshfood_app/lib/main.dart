@@ -20,12 +20,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AuthState.restore();
-  await CartState.restore();
-  await ThemeState.restore();
-  await locale_state.LocaleState.restore();
-  
-  final prefs = await SharedPreferences.getInstance();
+  final bootResults = await Future.wait<dynamic>([
+    AuthState.restore(),
+    CartState.restore(),
+    ThemeState.restore(),
+    locale_state.LocaleState.restore(),
+    SharedPreferences.getInstance(),
+  ]);
+  final prefs = bootResults[4] as SharedPreferences;
   final onboarded = prefs.getBool('freshfood_onboarded') ?? false;
 
   WishlistState.bindToAuth();

@@ -928,6 +928,8 @@ class _ShopProductCard extends StatelessWidget {
                             : CachedNetworkImage(
                                 imageUrl: img,
                                 fit: BoxFit.cover,
+                                memCacheWidth: 480,
+                                maxWidthDiskCache: 720,
                                 placeholder: (_, __) => Container(color: theme.colorScheme.surfaceContainerHighest),
                                 errorWidget: (_, __, ___) => Container(
                                   color: theme.colorScheme.surfaceContainerHighest,

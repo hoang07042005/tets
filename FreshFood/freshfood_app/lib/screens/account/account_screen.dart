@@ -167,12 +167,13 @@ class _ProfileHeaderCard extends StatelessWidget {
 
     Widget avatar() {
       final initials = name.trim().isNotEmpty ? name.trim().characters.first.toUpperCase() : 'U';
+      final showFallbackRing = avatarUrl.isEmpty;
       return Container(
         width: 56,
         height: 56,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: const Color(0xFF62BF39), width: 2),
+          border: showFallbackRing ? Border.all(color: const Color(0xFF62BF39), width: 2) : null,
         ),
         clipBehavior: Clip.antiAlias,
         child: avatarUrl.isEmpty

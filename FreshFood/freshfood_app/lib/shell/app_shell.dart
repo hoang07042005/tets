@@ -23,6 +23,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
   late final VoidCallback _navListener;
+  final Set<int> _visitedTabs = <int>{0};
 
   @override
   void initState() {
@@ -32,9 +33,29 @@ class _AppShellState extends State<AppShell> {
       final i = NavState.tabIndex.value;
       if (!mounted) return;
       if (i == _index) return;
-      setState(() => _index = i);
+      setState(() {
+        _index = i;
+        _visitedTabs.add(i);
+      });
     };
     NavState.tabIndex.addListener(_navListener);
+  }
+
+  Widget _buildTab(int index) {
+    switch (index) {
+      case 0:
+        return const HomeScreen();
+      case 1:
+        return const ProductsScreen();
+      case 2:
+        return const DealsScreen();
+      case 3:
+        return const ExploreScreen();
+      case 4:
+        return const AccountTab();
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   @override
@@ -164,20 +185,26 @@ class _AppShellState extends State<AppShell> {
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _index,
-        children: const [
-          HomeScreen(),
-          ProductsScreen(),
-          DealsScreen(),
-          ExploreScreen(),
-          AccountTab(),
-        ],
+      body: Stack(
+        children: List<Widget>.generate(5, (i) {
+          if (!_visitedTabs.contains(i)) return const SizedBox.shrink();
+          final active = i == _index;
+          return Offstage(
+            offstage: !active,
+            child: TickerMode(
+              enabled: active,
+              child: _buildTab(i),
+            ),
+          );
+        }),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) {
-          setState(() => _index = i);
+          setState(() {
+            _index = i;
+            _visitedTabs.add(i);
+          });
           NavState.tabIndex.value = i;
         },
         destinations: [

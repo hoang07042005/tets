@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -33,7 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   String? _error;
   String? _prefsWarning;
-  List<Product> _products = const [];
+  List<Product> _featuredProducts = const [];
   List<Voucher> _vouchers = const [];
   List<RecentReview> _recentReviews = const [];
   ReviewSummary _reviewSummary = const ReviewSummary(averageRating: 0, totalReviews: 0);
@@ -84,7 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final userId = AuthState.currentUser.value?.userId;
       final results = await Future.wait([
         SharedPreferences.getInstance(),
-        _api.getProducts(),
+        _api.getFeaturedProducts(take: 8),
         _api.getActiveVouchers(userId: userId),
         _api.getHomePageSettings(),
       ]);
@@ -95,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final vouchers = results[2] as List<Voucher>;
       final homeCfg = results[3] as HomePageSettings?;
       setState(() {
-        _products = prods;
+        _featuredProducts = prods;
         _vouchers = vouchers;
         _homeSettings = homeCfg;
         _savedVoucherCodes = saved.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
@@ -113,13 +112,6 @@ class _HomeScreenState extends State<HomeScreen> {
     // Lazy-load reviews after the primary UI is visible.
     // ignore: discarded_futures
     _loadReviews();
-  }
-
-  List<Product> get _featured {
-    if (_products.isEmpty) return const [];
-    final copy = [..._products];
-    copy.shuffle(Random());
-    return copy.take(8).toList(growable: false);
   }
 
   List<RecentReview> get _topReviews {
@@ -181,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final hero = _homeSettings?.hero;
     final roots = _homeSettings?.roots;
     final seasonal = _homeSettings?.seasonal;
-    final featured = _featured;
+    final featured = _featuredProducts;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -499,6 +491,8 @@ class _HeroSection extends StatelessWidget {
                               imageUrl: imageUrl,
                               fit: BoxFit.cover,
                               alignment: Alignment.centerRight,
+                              memCacheWidth: 900,
+                              maxWidthDiskCache: 1200,
                               placeholder: (_, __) => const SizedBox(),
                               errorWidget: (_, __, ___) => Container(
                                 color: const Color(0xFFF3F4F6),
@@ -763,6 +757,8 @@ class _ProductCard extends StatelessWidget {
                                 imageUrl: img,
                                 fit: BoxFit.cover,
                                 alignment: Alignment.center,
+                                memCacheWidth: 480,
+                                maxWidthDiskCache: 720,
                                 placeholder: (_, __) => Container(color: theme.colorScheme.surfaceContainerHighest),
                                 errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
                               ),
@@ -1174,6 +1170,8 @@ class _RootsSection extends StatelessWidget {
               child: CachedNetworkImage(
                 imageUrl: img,
                 fit: BoxFit.cover,
+                memCacheWidth: 720,
+                maxWidthDiskCache: 1080,
                 placeholder: (_, __) => Container(color: theme.colorScheme.surfaceContainerHighest),
                 errorWidget: (_, __, ___) => Container(color: theme.colorScheme.surfaceContainerHighest, child: const Icon(Icons.broken_image)),
               ),
@@ -1285,6 +1283,8 @@ class _SeasonalSection extends StatelessWidget {
                       CachedNetworkImage(
                         imageUrl: img,
                         fit: BoxFit.cover,
+                        memCacheWidth: 480,
+                        maxWidthDiskCache: 720,
                         placeholder: (_, __) => Container(color: theme.colorScheme.surfaceContainerHighest),
                         errorWidget: (_, __, ___) => Container(color: theme.colorScheme.surfaceContainerHighest, child: const Icon(Icons.broken_image)),
                       ),
