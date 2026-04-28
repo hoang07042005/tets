@@ -500,7 +500,15 @@ class _HeroSection extends StatelessWidget {
                               fit: BoxFit.cover,
                               alignment: Alignment.centerRight,
                               placeholder: (_, __) => const SizedBox(),
-                              errorWidget: (_, __, ___) => const SizedBox(),
+                              errorWidget: (_, __, ___) => Container(
+                                color: const Color(0xFFF3F4F6),
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.image_not_supported_outlined,
+                                  color: Color(0xFF9CA3AF),
+                                  size: 36,
+                                ),
+                              ),
                             ),
                             Container(
                               decoration: BoxDecoration(

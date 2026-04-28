@@ -150,7 +150,6 @@ export const Home = () => {
                     homeSettings?.hero?.imageUrl 
                   )
                 }
-                alt="Giỏ rau củ quả tươi xanh"
               />
             </div>
           </div>

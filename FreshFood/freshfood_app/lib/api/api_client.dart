@@ -406,15 +406,13 @@ class ApiClient {
   }
 
   Future<HomePageSettings?> getHomePageSettings() async {
-    final cached = _cacheGet<HomePageSettings>('home_page_settings');
-    if (cached != null) return cached;
+    // Home page content is CMS-like and changes infrequently, but when it does
+    // users expect the latest banner/text immediately after refresh.
     final res = await _client.get(_u('/HomePage'));
     if (res.statusCode < 200 || res.statusCode >= 300) return null;
     final body = jsonDecode(res.body);
     if (body is! Map) return null;
-    final v = HomePageSettings.fromJson(Map<String, dynamic>.from(body));
-    _cacheSet('home_page_settings', v, ttl: const Duration(minutes: 5));
-    return v;
+    return HomePageSettings.fromJson(Map<String, dynamic>.from(body));
   }
 
   Future<HomePageSettings?> getAdminHomePageSettings() async {
