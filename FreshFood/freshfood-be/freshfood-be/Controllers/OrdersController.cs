@@ -389,9 +389,9 @@ namespace freshfood_be.Controllers
                     // Atomic stock decrement to avoid oversell under concurrency.
                     // If another checkout is decrementing at the same time, this UPDATE will fail (0 rows affected).
                     var rows = await _context.Database.ExecuteSqlInterpolatedAsync($"""
-                        UPDATE dbo.Products
-                        SET StockQuantity = StockQuantity - {item.Quantity}
-                        WHERE ProductID = {item.ProductID} AND StockQuantity >= {item.Quantity}
+                        UPDATE "Products"
+                        SET "StockQuantity" = "StockQuantity" - {item.Quantity}
+                        WHERE "ProductID" = {item.ProductID} AND "StockQuantity" >= {item.Quantity}
                         """);
                     if (rows <= 0)
                     {
