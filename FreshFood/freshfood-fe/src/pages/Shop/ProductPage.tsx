@@ -21,17 +21,21 @@ import { useAuth } from '../../context/AuthContext';
 
 export const ProductPage = () => {
   const [products, setProducts] = useState<Product[]>([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCat, setSelectedCat] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [totalMatchingCount, setTotalMatchingCount] = useState(0);
+  const [globalTotalCount, setGlobalTotalCount] = useState(0);
+  const [categoryCounts, setCategoryCounts] = useState<Record<number, number>>({});
   /** Chỉ làm mờ lưới khi đã có dữ liệu — tránh thay cả khối nội dung (nhảy scroll khi kéo giá). */
   const [gridRefreshing, setGridRefreshing] = useState(false);
   /** Bật = không gửi min/max lên API */
   const [priceUnlimited, setPriceUnlimited] = useState(true);
   const [priceMinK, setPriceMinK] = useState(10);
   const [priceMaxK, setPriceMaxK] = useState(1000);
+  // Trần thanh giá (theo max effective price của toàn bộ sản phẩm Active)
+  const [maxPriceK, setMaxPriceK] = useState(1000);
   const [activeCerts, setActiveCerts] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState<ShopProductSort>('newest');
@@ -102,18 +106,32 @@ export const ProductPage = () => {
   useEffect(() => {
     const loadInit = async () => {
       try {
-        const [cats, allProds] = await Promise.all([
+        const [cats, meta] = await Promise.all([
           apiService.getCategories(),
-          apiService.getProducts()
+          apiService.getProductsMeta()
         ]);
         setCategories(cats);
-        setAllProducts(allProds);
+        setGlobalTotalCount(meta.totalCount);
+        setCategoryCounts(meta.categoryCounts || {});
+
+        // Convert max effective price -> slider max in "k" units
+        const maxVnd = Number(meta.maxEffectivePrice || 0);
+        const k = Math.ceil(maxVnd / 1000);
+        const rounded = Math.ceil(k / 10) * 10;
+        const nextMaxK = Math.max(10, rounded || 10);
+        setMaxPriceK(nextMaxK);
+        setPriceMaxK(nextMaxK);
       } catch (error) {
         console.error('Error init ShopPage:', error);
       }
     };
     loadInit();
   }, []);
+
+  // Khi đổi filter thì quay về trang 1 để tránh request sai page.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCat, searchTerm, sortBy, priceUnlimited, priceMinK, priceMaxK, activeCerts]);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -122,21 +140,27 @@ export const ProductPage = () => {
       if (hadData) setGridRefreshing(true);
       else setLoading(true);
       try {
-        const data = await apiService.getProducts({
+        const data = await apiService.getProductsPaged({
           categoryId: selectedCat === null ? undefined : selectedCat,
           searchTerm: searchTerm.trim() || undefined,
           sort: sortBy,
           minPrice: priceUnlimited ? undefined : priceMinK * 1000,
           maxPrice: priceUnlimited ? undefined : priceMaxK * 1000,
+          organic: activeCerts.includes('Hữu cơ'),
+          local: activeCerts.includes('Địa phương'),
+          certAny: activeCerts.includes('Chứng nhận'),
+          page: currentPage,
+          pageSize: itemsPerPage,
           signal: ac.signal,
         });
         if (ac.signal.aborted) return;
-        setProducts(data);
-        setCurrentPage(1);
+        setProducts(data.items || []);
+        setTotalMatchingCount(data.totalCount || 0);
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') return;
         console.error('Error loading products:', error);
         setProducts([]);
+        setTotalMatchingCount(0);
       } finally {
         if (!ac.signal.aborted) {
           setLoading(false);
@@ -146,65 +170,7 @@ export const ProductPage = () => {
     };
     loadProducts();
     return () => ac.abort();
-  }, [selectedCat, searchTerm, sortBy, priceUnlimited, priceMinK, priceMaxK]);
-
-  // Tính toán bộ đếm danh mục dựa trên danh sách TẤT CẢ sản phẩm
-  const categoryCounts = useMemo(() => {
-    const counts: Record<number, number> = {};
-    allProducts.forEach(p => {
-      if (p.categoryID) {
-        counts[p.categoryID] = (counts[p.categoryID] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [allProducts]);
-
-  /** Giá bán hiệu dụng — cùng logic với API Products. */
-  const sellingPriceVnd = (p: Product) => {
-    const v = p.discountPrice != null && p.discountPrice < p.price ? p.discountPrice : p.price;
-    return Number(v);
-  };
-
-  // Lọc client-side: khoảng giá (khớp ngay với thanh; tránh lệch API/debounce) + chứng chỉ
-  const filteredProducts = useMemo(() => {
-    let list = products;
-    if (!priceUnlimited) {
-      const lo = priceMinK * 1000;
-      const hi = priceMaxK * 1000;
-      list = list.filter((p) => {
-        const v = sellingPriceVnd(p);
-        return v >= lo && v <= hi;
-      });
-    }
-    if (activeCerts.length === 0) return list;
-    return list.filter((p) => {
-      const nameLower = p.productName.toLowerCase();
-      return activeCerts.some(
-        (cert) =>
-          (cert === 'Hữu cơ' &&
-            (nameLower.includes('tomato') || nameLower.includes('cà chua') || nameLower.includes('organic'))) ||
-          (cert === 'Địa phương' &&
-            (nameLower.includes('carrot') || nameLower.includes('cà rốt') || nameLower.includes('local'))) ||
-          cert === 'Chứng nhận',
-      );
-    });
-  }, [products, activeCerts, priceUnlimited, priceMinK, priceMaxK]);
-
-  /** Trần thanh trượt: đơn vị "k" = nghìn đồng (×1000 khi gửi API). Làm tròn lên theo chục nghìn. */
-  const maxPriceK = useMemo(() => {
-    if (allProducts.length === 0) return 1000;
-    const max = Math.max(
-      0,
-      ...allProducts.map((p) => {
-        const d = p.discountPrice != null && p.discountPrice < p.price ? p.discountPrice : p.price;
-        return Number(d ?? 0);
-      }),
-    );
-    const k = Math.ceil(max / 1000);
-    const rounded = Math.ceil(k / 10) * 10;
-    // Trước đây nhầm Math.max(1000, …) → trần tối thiểu 1.000.000đ, lọc sai.
-    return Math.max(10, rounded || 10);
-  }, [allProducts]);
+  }, [selectedCat, searchTerm, sortBy, priceUnlimited, priceMinK, priceMaxK, activeCerts, currentPage]);
 
   useEffect(() => {
     setPriceMinK((p) => Math.min(Math.max(Math.min(p, maxPriceK), 10), maxPriceK));
@@ -224,8 +190,7 @@ export const ProductPage = () => {
   };
 
   // Pagination (thứ tự đã sort từ API)
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-  const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.ceil(totalMatchingCount / itemsPerPage);
 
   const goToPage = (page: number) => {
     const next = Math.min(Math.max(page, 1), Math.max(totalPages, 1));
@@ -337,7 +302,7 @@ export const ProductPage = () => {
               onClick={() => setSelectedCat(null)}
             >
               <span>Tất cả sản phẩm</span>
-              <span>{allProducts.length}</span>
+              <span>{globalTotalCount}</span>
             </div>
             {categories.map(cat => (
               <div 
@@ -445,7 +410,7 @@ export const ProductPage = () => {
             <div>
               <h1 style={{margin: 0}}>Thực phẩm sạch – Tươi ngon mỗi ngày</h1>
               <p style={{marginTop: '0.5rem'}}>
-                Có <strong>{filteredProducts.length}</strong> nông sản tươi ngon cho bạn lựa chọn.
+                Có <strong>{totalMatchingCount}</strong> nông sản tươi ngon cho bạn lựa chọn.
               </p>
             </div>
             <div className="shop-actions">
@@ -520,7 +485,7 @@ export const ProductPage = () => {
 
           {loading && products.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '5rem' }}>Đang chuẩn bị nông sản tươi ngon...</div>
-          ) : filteredProducts.length === 0 && !gridRefreshing ? (
+          ) : totalMatchingCount === 0 && !gridRefreshing ? (
             <div style={{ textAlign: 'center', padding: '5rem', background: '#fcfcfc', borderRadius: '20px' }}>
               <h3>Không tìm thấy sản phẩm</h3>
               <p style={{ color: '#888' }}>Thử điều chỉnh thanh giá hoặc bộ lọc danh mục bạn nhé.</p>
@@ -550,7 +515,7 @@ export const ProductPage = () => {
                   </div>
                 ) : null}
                 <div className="shop-grid">
-                {paginatedProducts.map((product) => {
+                {products.map((product) => {
                   const pct = discountPercent(product);
                   const onSale = pct != null;
                   const sellPrice = onSale ? product.discountPrice! : product.price;

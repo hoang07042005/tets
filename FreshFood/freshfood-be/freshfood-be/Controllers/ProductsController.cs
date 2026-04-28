@@ -42,6 +42,19 @@ namespace freshfood_be.Controllers
             int ReviewCount
         );
 
+        public sealed record CategoryCountDto(int CategoryID, int Count);
+
+        public sealed record ProductsMetaDto(
+            int TotalCount,
+            IEnumerable<CategoryCountDto> CategoryCounts,
+            decimal MaxEffectivePrice
+        );
+
+        public sealed record ProductsPagedDto(
+            IEnumerable<PublicProductDto> Items,
+            int TotalCount
+        );
+
         // GET: api/Products?categoryID=&searchTerm=&minPrice=&maxPrice=&sort=
         // sort: newest | priceAsc | priceDesc | nameAsc | bestsellers
         [HttpGet]
@@ -169,6 +182,226 @@ namespace freshfood_be.Controllers
                     count
                 );
             }).ToList();
+        }
+
+        // GET: api/Products/Meta
+        // Dùng để lấy tổng số sản phẩm + counts theo category + max effective price cho UI slider.
+        [HttpGet("Meta")]
+        public async Task<ActionResult<ProductsMetaDto>> GetProductsMeta()
+        {
+            var query = _context.Products
+                .Where(p => p.Status == "Active")
+                .AsQueryable();
+
+            var totalCount = await query.CountAsync();
+
+            var categoryCounts = await query
+                .Where(p => p.CategoryID != null)
+                .GroupBy(p => p.CategoryID!.Value)
+                .Select(g => new CategoryCountDto(g.Key, g.Count()))
+                .ToListAsync();
+
+            var maxEff = await query
+                .Select(p => (p.DiscountPrice.HasValue && p.DiscountPrice < p.Price ? p.DiscountPrice.Value : p.Price))
+                .DefaultIfEmpty(0m)
+                .MaxAsync();
+
+            return Ok(new ProductsMetaDto(totalCount, categoryCounts, maxEff));
+        }
+
+        // GET: api/Products/Paged
+        // sort: newest | priceAsc | priceDesc | nameAsc | bestsellers
+        // cert filter: organic | local | certAny (nếu certAny=true thì không filter organic/local)
+        [HttpGet("Paged")]
+        public async Task<ActionResult<ProductsPagedDto>> GetProductsPaged(
+            int? categoryID = null,
+            string? searchTerm = null,
+            decimal? minPrice = null,
+            decimal? maxPrice = null,
+            string? sort = null,
+            int page = 1,
+            int pageSize = 18,
+            bool? organic = null,
+            bool? local = null,
+            bool? certAny = null)
+        {
+            page = page < 1 ? 1 : page;
+            pageSize = pageSize < 1 ? 18 : pageSize;
+
+            var query = _context.Products
+                .Include(p => p.Category)
+                .Include(p => p.Supplier)
+                .Include(p => p.ProductImages)
+                .Include(p => p.Reviews.Where(r => !r.IsDeleted && r.ModerationStatus == "Approved"))
+                .Where(p => p.Status == "Active")
+                .AsQueryable();
+
+            if (categoryID.HasValue)
+                query = query.Where(p => p.CategoryID == categoryID.Value);
+
+            if (!string.IsNullOrEmpty(searchTerm))
+                query = query.Where(p => p.ProductName.Contains(searchTerm));
+
+            if (minPrice.HasValue)
+                query = query.Where(p =>
+                    (p.DiscountPrice.HasValue && p.DiscountPrice < p.Price ? p.DiscountPrice.Value : p.Price) >= minPrice.Value);
+
+            if (maxPrice.HasValue)
+                query = query.Where(p =>
+                    (p.DiscountPrice.HasValue && p.DiscountPrice < p.Price ? p.DiscountPrice.Value : p.Price) <= maxPrice.Value);
+
+            var organicOn = organic == true;
+            var localOn = local == true;
+            var certAnyOn = certAny == true;
+
+            // Nếu Chứng nhận đang bật thì UI mong muốn "match all", tương tự logic FE hiện tại.
+            if (!certAnyOn)
+            {
+                if (organicOn && localOn)
+                {
+                    query = query.Where(p =>
+                        p.ProductName.ToLower().Contains("tomato") ||
+                        p.ProductName.ToLower().Contains("cà chua") ||
+                        p.ProductName.ToLower().Contains("organic") ||
+                        p.ProductName.ToLower().Contains("carrot") ||
+                        p.ProductName.ToLower().Contains("cà rốt") ||
+                        p.ProductName.ToLower().Contains("local")
+                    );
+                }
+                else if (organicOn)
+                {
+                    query = query.Where(p =>
+                        p.ProductName.ToLower().Contains("tomato") ||
+                        p.ProductName.ToLower().Contains("cà chua") ||
+                        p.ProductName.ToLower().Contains("organic")
+                    );
+                }
+                else if (localOn)
+                {
+                    query = query.Where(p =>
+                        p.ProductName.ToLower().Contains("carrot") ||
+                        p.ProductName.ToLower().Contains("cà rốt") ||
+                        p.ProductName.ToLower().Contains("local")
+                    );
+                }
+            }
+
+            var sortKey = (sort ?? "newest").Trim().ToLowerInvariant();
+
+            // bestsellers phải sắp xếp theo rank dựa trên OrderDetails (giống GetProducts hiện tại).
+            if (sortKey == "bestsellers")
+            {
+                var filteredList = await query.ToListAsync();
+                var totalCount = filteredList.Count;
+
+                var sales = await _context.OrderDetails.AsNoTracking()
+                    .GroupBy(od => od.ProductID)
+                    .Select(g => new { ProductId = g.Key, Sold = g.Sum(x => x.Quantity) })
+                    .ToListAsync();
+
+                var rank = new Dictionary<int, int>();
+                var order = 0;
+                foreach (var row in sales.OrderByDescending(x => x.Sold))
+                    rank[row.ProductId] = order++;
+
+                var sorted = filteredList
+                    .OrderBy(p => rank.TryGetValue(p.ProductID, out var r) ? r : int.MaxValue)
+                    .ThenBy(p => p.ProductName)
+                    .ToList();
+
+                var pageItems = sorted
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                return Ok(new ProductsPagedDto(
+                    pageItems.Select(p =>
+                    {
+                        var token = _idTokens.ProtectProductId(p.ProductID);
+                        var reviews = p.Reviews ?? new List<Review>();
+                        var count = reviews.Count;
+                        var avg = count > 0 ? Math.Round(reviews.Average(r => (double)r.Rating), 1) : 0d;
+                        return new PublicProductDto(
+                            p.ProductID,
+                            token,
+                            p.ProductName,
+                            p.CategoryID,
+                            p.Category,
+                            p.SupplierID,
+                            p.Supplier,
+                            p.Price,
+                            p.DiscountPrice,
+                            p.StockQuantity,
+                            p.Unit,
+                            p.Description,
+                            p.ManufacturedDate,
+                            p.ExpiryDate,
+                            p.Origin,
+                            p.StorageInstructions,
+                            p.Certifications,
+                            p.CreatedAt,
+                            p.ProductImages ?? new List<ProductImage>(),
+                            avg,
+                            count
+                        );
+                    }),
+                    totalCount
+                ));
+            }
+
+            var total = await query.CountAsync();
+
+            // Standard paging: sort trên DB + Skip/Take.
+            query = sortKey switch
+            {
+                "priceasc" => query
+                    .OrderBy(p => p.DiscountPrice.HasValue && p.DiscountPrice < p.Price ? p.DiscountPrice.Value : p.Price)
+                    .ThenBy(p => p.ProductID),
+                "pricedesc" => query
+                    .OrderByDescending(p => p.DiscountPrice.HasValue && p.DiscountPrice < p.Price ? p.DiscountPrice.Value : p.Price)
+                    .ThenBy(p => p.ProductID),
+                "nameasc" => query.OrderBy(p => p.ProductName).ThenBy(p => p.ProductID),
+                _ => query.OrderByDescending(p => p.CreatedAt).ThenByDescending(p => p.ProductID),
+            };
+
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return Ok(new ProductsPagedDto(
+                items.Select(p =>
+                {
+                    var token = _idTokens.ProtectProductId(p.ProductID);
+                    var reviews = p.Reviews ?? new List<Review>();
+                    var count = reviews.Count;
+                    var avg = count > 0 ? Math.Round(reviews.Average(r => (double)r.Rating), 1) : 0d;
+                    return new PublicProductDto(
+                        p.ProductID,
+                        token,
+                        p.ProductName,
+                        p.CategoryID,
+                        p.Category,
+                        p.SupplierID,
+                        p.Supplier,
+                        p.Price,
+                        p.DiscountPrice,
+                        p.StockQuantity,
+                        p.Unit,
+                        p.Description,
+                        p.ManufacturedDate,
+                        p.ExpiryDate,
+                        p.Origin,
+                        p.StorageInstructions,
+                        p.Certifications,
+                        p.CreatedAt,
+                        p.ProductImages ?? new List<ProductImage>(),
+                        avg,
+                        count
+                    );
+                }),
+                total
+            ));
         }
 
         // GET: api/Products/Promotions

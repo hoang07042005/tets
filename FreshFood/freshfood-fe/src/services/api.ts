@@ -57,6 +57,19 @@ export type GetProductsQuery = {
     signal?: AbortSignal;
 };
 
+export type ProductsPagedResult = {
+    items: Product[];
+    totalCount: number;
+};
+
+export type ProductsMetaResult = {
+    totalCount: number;
+    /** Map: categoryID -> count */
+    categoryCounts: Record<number, number>;
+    /** Effective max price (sale price if discount exists) */
+    maxEffectivePrice: number;
+};
+
 /** Lấy chuỗi lỗi từ body JSON ProblemDetails hoặc plain text. */
 export function parseApiErrorBody(text: string, fallback: string): string {
     const t = (text || '').trim();
@@ -764,6 +777,70 @@ export const apiService = {
             }
             console.error('Error fetching products:', error);
             return [];
+        }
+    },
+
+    async getProductsMeta(signal?: AbortSignal): Promise<ProductsMetaResult> {
+        try {
+            const response = await fetch(`${API_BASE_URL}/Products/Meta`, { signal });
+            if (!response.ok) return { totalCount: 0, categoryCounts: {}, maxEffectivePrice: 0 };
+            const j = (await response.json()) as any;
+            const totalCount = Number(j?.totalCount ?? j?.TotalCount ?? 0) || 0;
+            const maxEffectivePrice = Number(j?.maxEffectivePrice ?? j?.MaxEffectivePrice ?? 0) || 0;
+            const raw = (j?.categoryCounts ?? j?.CategoryCounts ?? []) as any[];
+            const map: Record<number, number> = {};
+            for (const x of raw || []) {
+                const k = Number(x?.categoryID ?? x?.CategoryID ?? x?.categoryId ?? x?.CategoryId ?? 0);
+                const c = Number(x?.count ?? x?.Count ?? 0);
+                if (k > 0) map[k] = c;
+            }
+            return { totalCount, categoryCounts: map, maxEffectivePrice };
+        } catch (error) {
+            if (error instanceof Error && error.name === 'AbortError') throw error;
+            console.error('Error fetching products meta:', error);
+            return { totalCount: 0, categoryCounts: {}, maxEffectivePrice: 0 };
+        }
+    },
+
+    async getProductsPaged(input: {
+        categoryId?: number;
+        searchTerm?: string;
+        minPrice?: number;
+        maxPrice?: number;
+        sort?: ShopProductSort;
+        page?: number;
+        pageSize?: number;
+        organic?: boolean;
+        local?: boolean;
+        certAny?: boolean;
+        signal?: AbortSignal;
+    }): Promise<ProductsPagedResult> {
+        try {
+            const params = new URLSearchParams();
+            if (input.categoryId !== undefined && input.categoryId !== null) params.append('categoryID', String(input.categoryId));
+            if (input.searchTerm) params.append('searchTerm', input.searchTerm);
+            if (input.minPrice != null) params.append('minPrice', String(input.minPrice));
+            if (input.maxPrice != null) params.append('maxPrice', String(input.maxPrice));
+            if (input.sort) params.append('sort', input.sort);
+            if (input.page != null) params.append('page', String(input.page));
+            if (input.pageSize != null) params.append('pageSize', String(input.pageSize));
+            if (typeof input.organic === 'boolean') params.append('organic', String(input.organic));
+            if (typeof input.local === 'boolean') params.append('local', String(input.local));
+            if (typeof input.certAny === 'boolean') params.append('certAny', String(input.certAny));
+
+            const response = await fetch(`${API_BASE_URL}/Products/Paged?${params.toString()}`, {
+                signal: input.signal,
+            });
+
+            if (!response.ok) return { items: [], totalCount: 0 };
+            const j = (await response.json()) as any;
+            const items = (j?.items ?? j?.Items ?? []) as Product[];
+            const totalCount = Number(j?.totalCount ?? j?.TotalCount ?? 0) || 0;
+            return { items, totalCount };
+        } catch (error) {
+            if (error instanceof Error && error.name === 'AbortError') throw error;
+            console.error('Error fetching products paged:', error);
+            return { items: [], totalCount: 0 };
         }
     },
 
