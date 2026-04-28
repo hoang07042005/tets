@@ -54,12 +54,15 @@ function AppFrame() {
     return () => window.removeEventListener('maintenance-mode', handleMaintenance);
   }, []);
 
-  if (isMaintenance) {
+  if (isMaintenance && path !== '/login') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', textAlign: 'center', padding: 20, backgroundColor: '#f9fafb' }}>
         <h1 style={{ fontSize: '2rem', marginBottom: 16, color: '#111827' }}>Hệ thống đang bảo trì</h1>
         <p style={{ color: '#4b5563', marginBottom: 24, fontSize: '1.1rem' }}>Chúng tôi đang tiến hành nâng cấp hệ thống. Vui lòng quay lại sau.</p>
-        <button onClick={() => window.location.reload()} style={{ padding: '10px 20px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Tải lại trang</button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button onClick={() => window.location.reload()} style={{ padding: '10px 20px', backgroundColor: '#10b981', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Tải lại trang</button>
+          <button onClick={() => window.location.href = '/login'} style={{ padding: '10px 20px', backgroundColor: '#6b7280', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Đăng nhập Admin</button>
+        </div>
       </div>
     );
   }

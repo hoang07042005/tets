@@ -142,6 +142,15 @@ namespace freshfood_be.Controllers
             if (user.IsLocked)
                 return Unauthorized("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.");
 
+            var lockFile = Path.Combine(_env.ContentRootPath, "maintenance.lock");
+            if (System.IO.File.Exists(lockFile))
+            {
+                if (!string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+                {
+                    return StatusCode(503, new { message = "Hệ thống đang bảo trì, chỉ Admin mới được đăng nhập.", isMaintenance = true });
+                }
+            }
+
             // Migrate legacy hashes to PBKDF2 on successful login.
             if (!string.IsNullOrWhiteSpace(user.PasswordHash) && !user.PasswordHash.Trim().StartsWith("pbkdf2$", StringComparison.OrdinalIgnoreCase))
             {

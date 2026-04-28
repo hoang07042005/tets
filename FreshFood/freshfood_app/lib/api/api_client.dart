@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:freshfood_app/config/api_config.dart';
 import 'package:freshfood_app/models/admin_low_stock_product.dart';
@@ -21,12 +23,60 @@ import 'package:freshfood_app/models/voucher.dart';
 import 'package:freshfood_app/models/shipping_method.dart';
 import 'package:http/http.dart' as http;
 import 'package:freshfood_app/state/auth_state.dart';
+import 'package:freshfood_app/state/maintenance_state.dart';
 import 'package:http_parser/http_parser.dart';
+
+class _MaintenanceAwareClient extends http.BaseClient {
+  final http.Client _inner;
+  _MaintenanceAwareClient(this._inner);
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final streamed = await _inner.send(request);
+    if (streamed.statusCode != 503) return streamed;
+
+    final Uint8List bytes = await streamed.stream.toBytes();
+    try {
+      final text = utf8.decode(bytes);
+      if (text.contains('"isMaintenance":true') || text.contains('"isMaintenance": true')) {
+        String? msg;
+        try {
+          final j = jsonDecode(text);
+          if (j is Map) {
+            final m = Map<String, dynamic>.from(j);
+            final raw = m['message'] ?? m['Message'];
+            if (raw != null) msg = raw.toString();
+          }
+        } catch (_) {
+          // ignore JSON decode errors
+        }
+        MaintenanceState.enter(msg: msg);
+      }
+    } catch (_) {
+      // ignore decode errors
+    }
+
+    // Re-create the stream because we consumed it.
+    return http.StreamedResponse(
+      Stream<List<int>>.fromIterable(<List<int>>[bytes]),
+      streamed.statusCode,
+      contentLength: bytes.length,
+      request: streamed.request,
+      headers: streamed.headers,
+      isRedirect: streamed.isRedirect,
+      persistentConnection: streamed.persistentConnection,
+      reasonPhrase: streamed.reasonPhrase,
+    );
+  }
+
+  @override
+  void close() => _inner.close();
+}
 
 class ApiClient {
   final http.Client _client;
 
-  static final http.Client _sharedClient = http.Client();
+  static final http.Client _sharedClient = _MaintenanceAwareClient(http.Client());
   static final ApiClient _instance = ApiClient._internal(_sharedClient);
 
   factory ApiClient({http.Client? client}) {

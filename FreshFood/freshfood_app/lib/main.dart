@@ -7,11 +7,15 @@ import 'package:freshfood_app/shell/app_shell.dart';
 import 'package:freshfood_app/screens/account/auth/auth_guest_set_password_screen.dart';
 import 'package:freshfood_app/screens/onboarding/onboarding_screen.dart';
 import 'package:freshfood_app/screens/payment/payment_result_screen.dart';
+import 'package:freshfood_app/api/api_client.dart';
 import 'package:freshfood_app/state/auth_state.dart';
 import 'package:freshfood_app/state/cart_state.dart';
 import 'package:freshfood_app/state/locale_state.dart' as locale_state;
 import 'package:freshfood_app/state/wishlist_state.dart';
 import 'package:freshfood_app/state/theme_state.dart';
+import 'package:freshfood_app/state/maintenance_state.dart';
+import 'package:freshfood_app/screens/system/maintenance_screen.dart';
+import 'package:freshfood_app/state/app_navigator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
@@ -29,9 +33,6 @@ Future<void> main() async {
   WishlistState.refreshIds();
   runApp(MyApp(onboarded: onboarded));
 }
-
-final _rootNavKey = GlobalKey<NavigatorState>();
-final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
 class MyApp extends StatefulWidget {
   final bool onboarded;
@@ -62,6 +63,16 @@ class _MyAppState extends State<MyApp> {
       if (uri != null) {
         // ignore: discarded_futures
         _handleDeepLink(uri);
+      }
+    });
+
+    // Proactively probe a public endpoint once at startup so maintenance
+    // mode is detected even if the first screen uses cached/offline data.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await ApiClient.instance.getHomePageSettings();
+      } catch (_) {
+        // ignore - maintenance detection is handled inside ApiClient wrapper (503)
       }
     });
   }
@@ -109,9 +120,9 @@ class _MyAppState extends State<MyApp> {
       }
 
       // Bring user back to root then show a dedicated result screen.
-      _rootNavKey.currentState?.popUntil((r) => r.isFirst);
+      AppNavigator.rootKey.currentState?.popUntil((r) => r.isFirst);
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final nav = _rootNavKey.currentState;
+        final nav = AppNavigator.rootKey.currentState;
         if (nav == null) return;
         nav.push(
           MaterialPageRoute(
@@ -129,9 +140,9 @@ class _MyAppState extends State<MyApp> {
     if (uri.host == 'auth' && uri.path == '/guest-set-password') {
       final email = (uri.queryParameters['email'] ?? '').trim();
       final token = (uri.queryParameters['token'] ?? '').trim();
-      _rootNavKey.currentState?.popUntil((r) => r.isFirst);
+      AppNavigator.rootKey.currentState?.popUntil((r) => r.isFirst);
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final nav = _rootNavKey.currentState;
+        final nav = AppNavigator.rootKey.currentState;
         if (nav == null) return;
         nav.push(MaterialPageRoute(builder: (_) => GuestSetPasswordScreen(initialEmail: email, initialToken: token)));
       });
@@ -256,8 +267,8 @@ class _MyAppState extends State<MyApp> {
           builder: (context, loc, __) {
             return MaterialApp(
               title: 'FreshFood',
-              navigatorKey: _rootNavKey,
-              scaffoldMessengerKey: _messengerKey,
+              navigatorKey: AppNavigator.rootKey,
+              scaffoldMessengerKey: AppNavigator.messengerKey,
               theme: light,
               darkTheme: dark,
               themeMode: mode,
@@ -269,6 +280,34 @@ class _MyAppState extends State<MyApp> {
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
               ],
+              builder: (context, child) {
+                final base = child ?? const SizedBox.shrink();
+                return ValueListenableBuilder<bool>(
+                  valueListenable: MaintenanceState.isMaintenance,
+                  builder: (_, isMaint, __) {
+                    return ValueListenableBuilder<bool>(
+                      valueListenable: MaintenanceState.bypassOverlay,
+                      builder: (_, bypass, ___) {
+                        return ValueListenableBuilder<AuthUser?>(
+                          valueListenable: AuthState.currentUser,
+                          builder: (_, user, ____) {
+                            final role = (user?.role ?? '').trim().toLowerCase();
+                            final isAdmin = role == 'admin';
+                            final showOverlay = isMaint && !isAdmin && !bypass;
+                            if (!showOverlay) return base;
+                            return Stack(
+                              children: [
+                                base,
+                                const Positioned.fill(child: MaintenanceScreen()),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                );
+              },
               home: widget.onboarded ? const AppShell() : const OnboardingScreen(),
             );
           },
