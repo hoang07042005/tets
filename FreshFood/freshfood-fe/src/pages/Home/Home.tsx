@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Truck, ShieldCheck, Plus, ChevronRight, Heart, BadgePercent, Copy, Sparkles, ShoppingCart, TagIcon } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Product, Category, RecentReview, ReviewSummary, Voucher } from '../../types';
+import { Product, RecentReview, ReviewSummary, Voucher } from '../../types';
 import { apiService, resolveMediaUrl } from '../../services/api';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
@@ -9,7 +9,6 @@ import { useAuth } from '../../context/AuthContext';
 
 export const Home = () => {
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [recentReviews, setRecentReviews] = useState<RecentReview[]>([]);
   const [reviewSummary, setReviewSummary] = useState<ReviewSummary>({ averageRating: 0, totalReviews: 0 });
   const [loading, setLoading] = useState(true);
@@ -44,9 +43,8 @@ export const Home = () => {
     const loadData = async () => {
       try {
         setLoading(true);
-        const [prodData, catData, reviewsData, summaryData, voucherData, homeCfg] = await Promise.all([
-          apiService.getProducts(),
-          apiService.getCategories(),
+        const [prodData, reviewsData, summaryData, voucherData, homeCfg] = await Promise.all([
+          apiService.getFeaturedProducts(8),
           // Fetch more so we can pick top-rated + newest 2 on client.
           apiService.getRecentReviews(30),
           apiService.getReviewSummary(),
@@ -54,7 +52,6 @@ export const Home = () => {
           apiService.getHomePageSettings(),
         ]);
         setProducts(prodData);
-        setCategories(catData);
         setRecentReviews(reviewsData);
         setReviewSummary(summaryData);
         setVouchers(voucherData);
@@ -88,13 +85,6 @@ export const Home = () => {
     if (list.length === 0) return [];
     return [...list, ...list];
   }, [vouchers]);
-
-  // Pick 8 random products if available, otherwise just first 8
-  const featuredProducts = useMemo(() => {
-    if (products.length === 0) return [];
-    // Shuffle and pick 8
-    return [...products].sort(() => 0.5 - Math.random()).slice(0, 8);
-  }, [products]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
@@ -262,7 +252,7 @@ export const Home = () => {
 
         {!loading && !error && (
           <div className="grid">
-            {featuredProducts.map(product => (
+            {products.map(product => (
               <div
                 key={product.productID}
                 className="product-card"

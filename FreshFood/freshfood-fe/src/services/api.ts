@@ -844,6 +844,16 @@ export const apiService = {
         }
     },
 
+    async getFeaturedProducts(take = 8): Promise<Product[]> {
+        const safeTake = Number.isFinite(take) && take > 0 ? Math.floor(take) : 8;
+        const data = await this.getProductsPaged({
+            sort: 'newest',
+            page: 1,
+            pageSize: safeTake,
+        });
+        return data.items;
+    },
+
     async getPromotions(): Promise<Product[]> {
         const response = await fetch(`${API_BASE_URL}/Products/Promotions`);
         return response.ok ? response.json() : [];

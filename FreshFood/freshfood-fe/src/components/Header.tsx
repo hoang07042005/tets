@@ -70,7 +70,7 @@ export const Header = () => {
           <NavLink to="/products" className={() => `nav-link ${isProductsActive ? 'active' : ''}`}>Sản phẩm</NavLink>
           <NavLink to="/promotions" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>Khuyến mãi</NavLink>
           <NavLink to="/blog" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>Blog</NavLink>
-          <NavLink to="/ai-assistant" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>Hôm nay ăn gì?</NavLink>
+          {/* <NavLink to="/ai-assistant" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>Hôm nay ăn gì?</NavLink> */}
           <NavLink to="/about" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>Giới thiệu</NavLink>
           <NavLink to="/contact" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>Liên hệ</NavLink>
           {isAuthenticated && isAdmin && (

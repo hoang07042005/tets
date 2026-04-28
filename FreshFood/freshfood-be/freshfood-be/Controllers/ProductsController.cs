@@ -191,6 +191,7 @@ namespace freshfood_be.Controllers
         {
             var query = _context.Products
                 .Where(p => p.Status == "Active")
+                .AsNoTracking()
                 .AsQueryable();
 
             var totalCount = await query.CountAsync();
@@ -201,10 +202,11 @@ namespace freshfood_be.Controllers
                 .Select(g => new CategoryCountDto(g.Key, g.Count()))
                 .ToListAsync();
 
+            // PostgreSQL provider can be picky about translating certain conditional decimal expressions.
+            // Use a nullable projection and coalesce the final result to avoid provider-specific edge cases.
             var maxEff = await query
-                .Select(p => (p.DiscountPrice.HasValue && p.DiscountPrice < p.Price ? p.DiscountPrice.Value : p.Price))
-                .DefaultIfEmpty(0m)
-                .MaxAsync();
+                .Select(p => (decimal?)((p.DiscountPrice != null && p.DiscountPrice < p.Price) ? p.DiscountPrice : p.Price))
+                .MaxAsync() ?? 0m;
 
             return Ok(new ProductsMetaDto(totalCount, categoryCounts, maxEff));
         }
