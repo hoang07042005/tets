@@ -147,8 +147,7 @@ export const Home = () => {
               <img
                 src={
                   resolveMediaUrl(
-                    homeSettings?.hero?.imageUrl ||
-                      'https://lh3.googleusercontent.com/aida-public/AB6AXuAn0_mNhh8RAPtDRh5dXiS0PwqdeokDtFRsYYdHuwNzUd8DUP-XK0LCy3fRsasW6dte8-HP5n76MS78rIwCFlIXB_KoyZHUcublemfM8U8s7E-DaT3kwb8Rf-aUW6_ffI3mA1DBRY8A1prT7MxWir9RavBVLMd5uwlQbf2244qVhU9tRG5QKHw5liPbu7L1kboFE0LcFFVg3M20VNc2Z_BT8h-MijK_VjDfGHRrclE6pjmN0dn1X4iVzSCCAvJ7wP8rqExns9kIZA8',
+                    homeSettings?.hero?.imageUrl 
                   )
                 }
                 alt="Giỏ rau củ quả tươi xanh"

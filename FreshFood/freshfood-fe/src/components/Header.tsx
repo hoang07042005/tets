@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ShoppingCart, LogOut, User as UserIcon, ChevronDown, Heart, Package, Menu, X } from 'lucide-react';
+import { ShoppingCart, LogOut, User as UserIcon, ChevronDown, Heart, Package, Menu, X, History } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { Link, NavLink, useLocation } from 'react-router-dom';
@@ -133,6 +133,10 @@ export const Header = () => {
                   <Link to="/wishlist" className="user-menu-item" role="menuitem" onClick={() => setOpen(false)}>
                     <Heart size={18} />
                     Yêu thích
+                  </Link>
+                  <Link to="/purchased-products" className="user-menu-item" role="menuitem" onClick={() => setOpen(false)}>
+                    <History size={18} />
+                    Sản phẩm đã mua
                   </Link>
                   <button
                     type="button"

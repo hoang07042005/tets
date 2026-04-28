@@ -24,6 +24,7 @@ import { OrdersPage } from './pages/Account/Orders/OrdersPage'
 import { OrderDetailPage } from './pages/Account/Orders/OrderDetailPage'
 import { OrderTrackPage } from './pages/Account/Orders/OrderTrackPage'
 import { WishlistPage } from './pages/Account/WishlistPage'
+import { PurchasedProductsPage } from './pages/Account/PurchasedProductsPage'
 import { WishlistProvider } from './context/WishlistContext'
 import { AdminPage } from './admin-pages/AdminPage'
 import { BlogListPage } from './pages/Blog/BlogListPage'
@@ -97,6 +98,7 @@ function AppFrame() {
         <Route path="/orders/:id" element={<OrderDetailPage />} />
         <Route path="/tra-cuu-don-hang" element={<OrderTrackPage />} />
         <Route path="/wishlist" element={<WishlistPage />} />
+        <Route path="/purchased-products" element={<PurchasedProductsPage />} />
         <Route path="/ai-assistant" element={<AiAssistantPage />} />
         <Route path="/admin/*" element={<AdminPage />} />
       </Routes>
