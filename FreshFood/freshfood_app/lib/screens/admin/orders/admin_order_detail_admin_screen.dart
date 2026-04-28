@@ -42,7 +42,13 @@ class _AdminOrderDetailAdminScreenState extends State<AdminOrderDetailAdminScree
   @override
   void initState() {
     super.initState();
-    _load();
+    // Localizations (and Theme) are not ready until after the first frame;
+    // _load uses AppLocalizations.of(context).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // ignore: discarded_futures
+      _load();
+    });
   }
 
   Future<void> _load() async {
