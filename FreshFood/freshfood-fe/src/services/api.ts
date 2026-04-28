@@ -977,10 +977,12 @@ export const apiService = {
         paymentMethod?: string;
         voucherCode?: string;
         items: Array<{ productID: number; quantity: number }>;
-    }): Promise<any> {
+    }, options?: { idempotencyKey?: string }): Promise<any> {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (options?.idempotencyKey?.trim()) headers['Idempotency-Key'] = options.idempotencyKey.trim();
         const response = await fetch(`${API_BASE_URL}/Orders`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(orderData)
         });
         if (!response.ok) {

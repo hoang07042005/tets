@@ -13,6 +13,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.IO;
 using System.Security.Claims;
+using System.Text.Json;
 
 namespace freshfood_be.Controllers
 {
@@ -299,6 +300,39 @@ namespace freshfood_be.Controllers
                 return BadRequest("Invalid order data.");
             }
 
+            var idempotencyKey = (Request.Headers["Idempotency-Key"].FirstOrDefault() ?? string.Empty).Trim();
+            OrderIdempotency? idem = null;
+            var requestHash = ComputeCreateOrderRequestHash(orderDto);
+            if (!string.IsNullOrWhiteSpace(idempotencyKey))
+            {
+                try
+                {
+                    idem = await TryBeginIdempotentOrderRequestAsync(idempotencyKey, requestHash, orderDto);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Conflict(new { message = ex.Message });
+                }
+                if (idem == null)
+                {
+                    return Conflict(new { message = "Yêu cầu tạo đơn đang được xử lý. Vui lòng đợi trong giây lát." });
+                }
+
+                if (idem.OrderID is > 0)
+                {
+                    var existing = await _context.Orders
+                        .Include(o => o.OrderDetails)
+                        .Include(o => o.Payments)
+                        .Include(o => o.Shipments)
+                        .FirstOrDefaultAsync(o => o.OrderID == idem.OrderID.Value);
+                    if (existing != null)
+                    {
+                        existing.OrderToken = _idTokens.ProtectOrderId(existing.OrderID);
+                        return CreatedAtAction(nameof(GetOrder), new { id = existing.OrderID }, existing);
+                    }
+                }
+            }
+
             var notifyGuestAfterOrder = orderDto.GuestCheckout != null && orderDto.UserID is not > 0;
 
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -544,6 +578,13 @@ namespace freshfood_be.Controllers
 
                 await transaction.CommitAsync();
 
+                if (idem != null)
+                {
+                    idem.OrderID = order.OrderID;
+                    idem.CompletedAtUtc = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+
                 // Online payments: mail thanh toán thành công gửi từ controller tương ứng (VNPay/MoMo).
                 // Email “cập nhật trạng thái đơn” chỉ khi Đã giao (Admin).
                 if (resolvedUserId > 0 && paymentMethod is not ("VNPAY" or "MOMO" or "MOMO_ATM"))
@@ -566,6 +607,18 @@ namespace freshfood_be.Controllers
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
+                if (idem != null && idem.OrderID is not > 0)
+                {
+                    try
+                    {
+                        _context.OrderIdempotencies.Remove(idem);
+                        await _context.SaveChangesAsync();
+                    }
+                    catch
+                    {
+                        // ignore cleanup failure; key may expire or be handled manually
+                    }
+                }
                 _logger.LogError(ex, "CreateOrder failed unexpectedly");
                 return StatusCode(500, "Không tạo được đơn hàng do lỗi máy chủ. Vui lòng thử lại sau.");
             }
@@ -1349,6 +1402,75 @@ namespace freshfood_be.Controllers
             }
             cart.UpdatedAt = DateTime.Now;
             await _context.SaveChangesAsync();
+        }
+
+        private static string ComputeCreateOrderRequestHash(CreateOrderDto dto)
+        {
+            var payload = JsonSerializer.Serialize(new
+            {
+                userID = dto.UserID,
+                guestCheckout = dto.GuestCheckout == null ? null : new
+                {
+                    fullName = (dto.GuestCheckout.FullName ?? string.Empty).Trim(),
+                    email = (dto.GuestCheckout.Email ?? string.Empty).Trim().ToLowerInvariant(),
+                    phone = (dto.GuestCheckout.Phone ?? string.Empty).Trim(),
+                },
+                shippingAddress = (dto.ShippingAddress ?? string.Empty).Trim(),
+                shippingAddressId = dto.ShippingAddressId,
+                shippingMethodID = dto.ShippingMethodID,
+                paymentMethod = (dto.PaymentMethod ?? string.Empty).Trim().ToUpperInvariant(),
+                voucherCode = (dto.VoucherCode ?? string.Empty).Trim().ToUpperInvariant(),
+                items = (dto.Items ?? new List<OrderItemDto>())
+                    .OrderBy(x => x.ProductID)
+                    .ThenBy(x => x.Quantity)
+                    .Select(x => new { x.ProductID, x.Quantity })
+                    .ToList()
+            });
+            using var sha = SHA256.Create();
+            var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(payload));
+            return Convert.ToHexString(bytes).ToLowerInvariant();
+        }
+
+        private async Task<OrderIdempotency?> TryBeginIdempotentOrderRequestAsync(string key, string requestHash, CreateOrderDto dto)
+        {
+            var normalized = key.Trim();
+            if (string.IsNullOrWhiteSpace(normalized)) return null;
+
+            var authId = GetAuthUserId();
+            var candidateUserId = authId is > 0 ? authId : dto.UserID;
+
+            var existing = await _context.OrderIdempotencies.FirstOrDefaultAsync(x => x.IdempotencyKey == normalized);
+            if (existing != null)
+            {
+                if (!string.Equals(existing.RequestHash ?? string.Empty, requestHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Idempotency-Key đã được dùng cho một payload khác.");
+                }
+                return existing;
+            }
+
+            var row = new OrderIdempotency
+            {
+                IdempotencyKey = normalized,
+                RequestHash = requestHash,
+                UserID = candidateUserId
+            };
+            _context.OrderIdempotencies.Add(row);
+            try
+            {
+                await _context.SaveChangesAsync();
+                return row;
+            }
+            catch (DbUpdateException)
+            {
+                _context.Entry(row).State = EntityState.Detached;
+                var raced = await _context.OrderIdempotencies.FirstOrDefaultAsync(x => x.IdempotencyKey == normalized);
+                if (raced != null && !string.Equals(raced.RequestHash ?? string.Empty, requestHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Idempotency-Key đã được dùng cho một payload khác.");
+                }
+                return raced;
+            }
         }
     }
 }

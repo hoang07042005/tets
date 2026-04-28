@@ -942,6 +942,83 @@ class ApiClient {
     return out;
   }
 
+  Future<ProductsMetaResult> getProductsMeta() async {
+    final res = await _client.get(_u('/Products/Meta'));
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      return const ProductsMetaResult(totalCount: 0, categoryCounts: <int, int>{}, maxEffectivePrice: 0);
+    }
+    final body = jsonDecode(res.body);
+    if (body is! Map) {
+      return const ProductsMetaResult(totalCount: 0, categoryCounts: <int, int>{}, maxEffectivePrice: 0);
+    }
+    final m = Map<String, dynamic>.from(body);
+    final totalRaw = m['totalCount'] ?? m['TotalCount'] ?? 0;
+    final totalCount = totalRaw is num ? totalRaw.toInt() : int.tryParse('$totalRaw') ?? 0;
+
+    final maxRaw = m['maxEffectivePrice'] ?? m['MaxEffectivePrice'] ?? 0;
+    final maxEffectivePrice = maxRaw is num ? maxRaw.toDouble() : double.tryParse('$maxRaw') ?? 0;
+
+    final countsRaw = m['categoryCounts'] ?? m['CategoryCounts'] ?? const [];
+    final counts = <int, int>{};
+    if (countsRaw is List) {
+      for (final e in countsRaw) {
+        if (e is! Map) continue;
+        final em = Map<String, dynamic>.from(e);
+        final idRaw = em['categoryID'] ?? em['CategoryID'] ?? em['categoryId'] ?? em['CategoryId'] ?? 0;
+        final cRaw = em['count'] ?? em['Count'] ?? 0;
+        final id = idRaw is num ? idRaw.toInt() : int.tryParse('$idRaw') ?? 0;
+        final c = cRaw is num ? cRaw.toInt() : int.tryParse('$cRaw') ?? 0;
+        if (id > 0) counts[id] = c;
+      }
+    }
+
+    return ProductsMetaResult(totalCount: totalCount, categoryCounts: counts, maxEffectivePrice: maxEffectivePrice);
+  }
+
+  Future<ProductsPagedResult> getProductsPaged({
+    int? categoryId,
+    String? searchTerm,
+    num? minPrice,
+    num? maxPrice,
+    String? sort,
+    required int page,
+    required int pageSize,
+    bool? organic,
+    bool? local,
+    bool? certAny,
+  }) async {
+    final params = <String, String>{
+      'page': '${page < 1 ? 1 : page}',
+      'pageSize': '${pageSize < 1 ? 18 : pageSize}',
+      if (categoryId != null) 'categoryID': '$categoryId',
+      if ((searchTerm ?? '').trim().isNotEmpty) 'searchTerm': searchTerm!.trim(),
+      if (minPrice != null) 'minPrice': '$minPrice',
+      if (maxPrice != null) 'maxPrice': '$maxPrice',
+      if ((sort ?? '').trim().isNotEmpty) 'sort': sort!.trim(),
+      if (organic != null) 'organic': '$organic',
+      if (local != null) 'local': '$local',
+      if (certAny != null) 'certAny': '$certAny',
+    };
+
+    final res = await _client.get(_u('/Products/Paged').replace(queryParameters: params));
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      return const ProductsPagedResult(items: <Product>[], totalCount: 0);
+    }
+    final body = jsonDecode(res.body);
+    if (body is! Map) return const ProductsPagedResult(items: <Product>[], totalCount: 0);
+    final m = Map<String, dynamic>.from(body);
+    final totalRaw = m['totalCount'] ?? m['TotalCount'] ?? 0;
+    final totalCount = totalRaw is num ? totalRaw.toInt() : int.tryParse('$totalRaw') ?? 0;
+
+    final itemsRaw = m['items'] ?? m['Items'] ?? const [];
+    if (itemsRaw is! List) return ProductsPagedResult(items: const <Product>[], totalCount: totalCount);
+    final items = <Product>[];
+    for (final e in itemsRaw) {
+      if (e is Map) items.add(Product.fromJson(Map<String, dynamic>.from(e)));
+    }
+    return ProductsPagedResult(items: items, totalCount: totalCount);
+  }
+
   /// Tra cứu vận đơn công khai: mã đơn + SĐT đặt hàng (khớp SĐT tài khoản đặt hàng).
   /// GET: /api/Orders/track?orderCode=...&phone=...
   Future<PublicOrderTrack?> trackOrder({required String orderCode, required String phone}) async {
@@ -1134,6 +1211,7 @@ class ApiClient {
     required String paymentMethod, // COD | VNPAY | MOMO
     String? voucherCode,
     required List<OrderItemDraft> items,
+    String? idempotencyKey,
   }) async {
     if ((userId ?? 0) <= 0 && guestCheckout == null) {
       throw Exception('Vui lòng đăng nhập hoặc nhập thông tin khách.');
@@ -1151,9 +1229,13 @@ class ApiClient {
       'items': items.map((e) => e.toJson()).toList(growable: false),
     };
 
+    final headers = _authHeaders(json: true);
+    final key = (idempotencyKey ?? '').trim();
+    if (key.isNotEmpty) headers['Idempotency-Key'] = key;
+
     final res = await _client.post(
       _u('/Orders'),
-      headers: _authHeaders(json: true),
+      headers: headers,
       body: jsonEncode(payload),
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -1498,6 +1580,19 @@ class ApiClient {
     if (body is! Map) return null;
     return Product.fromJson(Map<String, dynamic>.from(body));
   }
+}
+
+class ProductsMetaResult {
+  final int totalCount;
+  final Map<int, int> categoryCounts;
+  final double maxEffectivePrice;
+  const ProductsMetaResult({required this.totalCount, required this.categoryCounts, required this.maxEffectivePrice});
+}
+
+class ProductsPagedResult {
+  final List<Product> items;
+  final int totalCount;
+  const ProductsPagedResult({required this.items, required this.totalCount});
 }
 
 class _CacheEntry {

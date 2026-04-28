@@ -16,6 +16,27 @@ type PendingOnlinePaymentDraft = {
 };
 
 const PENDING_ONLINE_PAYMENT_KEY = 'freshfood_pending_online_payment_v1';
+const CHECKOUT_IDEMPOTENCY_KEY = 'freshfood_checkout_idempotency_v1';
+
+const getOrCreateCheckoutIdempotencyKey = () => {
+  try {
+    const existing = (sessionStorage.getItem(CHECKOUT_IDEMPOTENCY_KEY) || '').trim();
+    if (existing) return existing;
+    const next = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`).toString();
+    sessionStorage.setItem(CHECKOUT_IDEMPOTENCY_KEY, next);
+    return next;
+  } catch {
+    return (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`).toString();
+  }
+};
+
+const clearCheckoutIdempotencyKey = () => {
+  try {
+    sessionStorage.removeItem(CHECKOUT_IDEMPOTENCY_KEY);
+  } catch {
+    // ignore
+  }
+};
 
 export const CheckoutPage = () => {
   const { cart, totalItems, totalPrice, clearCart } = useCart();
@@ -293,7 +314,9 @@ export const CheckoutPage = () => {
         }
       }
 
-      const createdOrder = await apiService.createOrder(orderData);
+      const createdOrder = await apiService.createOrder(orderData, {
+        idempotencyKey: getOrCreateCheckoutIdempotencyKey(),
+      });
       const createdOrderCode =
         (createdOrder?.orderCode ?? createdOrder?.OrderCode ?? createdOrder?.order_code ?? createdOrder?.orderCODE ?? '').toString().trim();
 
@@ -348,6 +371,7 @@ export const CheckoutPage = () => {
       setSuccess(true);
       clearCart();
       clearPendingOnlineDraft();
+      clearCheckoutIdempotencyKey();
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Đã xảy ra lỗi khi đặt hàng. Vui lòng thử lại.';
       alert(msg);

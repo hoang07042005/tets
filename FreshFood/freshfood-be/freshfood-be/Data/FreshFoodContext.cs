@@ -36,6 +36,7 @@ namespace freshfood_be.Data
         public DbSet<UserAddress> UserAddresses { get; set; } = null!;
         public DbSet<HomePageSettings> HomePageSettings { get; set; } = null!;
         public DbSet<AdminAuditLog> AdminAuditLogs { get; set; } = null!;
+        public DbSet<OrderIdempotency> OrderIdempotencies { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -94,6 +95,10 @@ namespace freshfood_be.Data
 
             modelBuilder.Entity<UserAddress>()
                 .HasIndex(a => a.UserID);
+
+            modelBuilder.Entity<OrderIdempotency>()
+                .HasIndex(x => x.IdempotencyKey)
+                .IsUnique();
             
             // Seed data could be added here later if needed, 
             // but the SQL script already has it.

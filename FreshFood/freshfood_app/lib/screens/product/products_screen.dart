@@ -26,7 +26,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
   final _searchCtl = TextEditingController();
 
   List<Category> _categories = const [];
-  List<Product> _allProducts = const [];
   List<Product> _products = const [];
 
   bool _loading = true;
@@ -35,6 +34,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   int? _selectedCatId;
   ProductSort _sortBy = ProductSort.newest;
+
+  int _globalTotalCount = 0;
+  Map<int, int> _categoryCounts = const <int, int>{};
+  int _totalMatchingCount = 0;
 
   bool _priceUnlimited = true;
   double _priceMinK = 10;
@@ -55,8 +58,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
       _debounce?.cancel();
       _debounce = Timer(const Duration(milliseconds: 350), () {
         if (!mounted) return;
-        // Search is client-side to avoid calling API on every keystroke.
+        // Search is server-side (paged endpoint).
         setState(() => _page = 1);
+        // ignore: discarded_futures
+        _loadPaged();
       });
     });
     _loadInit();
@@ -77,21 +82,28 @@ class _ProductsScreenState extends State<ProductsScreen> {
     try {
       final results = await Future.wait([
         _api.getCategories(),
-        _api.getProducts(),
+        _api.getProductsMeta(),
       ]);
 
       final cats = (results[0] as List<Category>);
-      final all = (results[1] as List<Product>);
+      final meta = (results[1] as ProductsMetaResult);
       if (!mounted) return;
 
       setState(() {
         _categories = cats;
-        _allProducts = all;
-        _products = List<Product>.from(all);
+        _globalTotalCount = meta.totalCount;
+        _categoryCounts = meta.categoryCounts;
+        _totalMatchingCount = 0;
         _page = 1;
+        final maxVnd = meta.maxEffectivePrice;
+        final k = (maxVnd / 1000).ceil().toDouble();
+        final rounded = ((k / 10).ceil() * 10).clamp(10, 1000000).toDouble();
+        _maxPriceK = rounded <= 10 ? 1000 : rounded;
+        _priceMinK = _priceMinK.clamp(10, _maxPriceK);
+        _priceMaxK = _priceMaxK.clamp(10, _maxPriceK);
+        if (_priceMinK > _priceMaxK) _priceMinK = _priceMaxK;
       });
-
-      _syncPriceBounds();
+      await _loadPaged();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'Không tải được dữ liệu.');
@@ -100,33 +112,20 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
   }
 
-  double _sellingPriceVnd(Product p) {
-    final d = p.discountPrice;
-    if (d != null && d < p.price) return d;
-    return p.price;
-  }
-
-  void _syncPriceBounds() {
-    if (_allProducts.isEmpty) {
-      setState(() {
-        _priceMinK = 10;
-        _priceMaxK = 1000;
-        _maxPriceK = 1000;
-      });
-      return;
+  String _sortKey() {
+    switch (_sortBy) {
+      case ProductSort.priceAsc:
+        return 'priceAsc';
+      case ProductSort.priceDesc:
+        return 'priceDesc';
+      case ProductSort.nameAsc:
+        return 'nameAsc';
+      case ProductSort.newest:
+        return 'newest';
     }
-    final maxVnd = _allProducts.map(_sellingPriceVnd).fold<double>(0, (mx, v) => v > mx ? v : mx);
-    final k = (maxVnd / 1000).ceil().toDouble();
-    final rounded = ((k / 10).ceil() * 10).clamp(10, 1000000).toDouble();
-    setState(() {
-      _maxPriceK = rounded;
-      _priceMinK = _priceMinK.clamp(10, rounded);
-      _priceMaxK = _priceMaxK.clamp(10, rounded);
-      if (_priceMinK > _priceMaxK) _priceMinK = _priceMaxK;
-    });
   }
 
-  Future<void> _loadProducts() async {
+  Future<void> _loadPaged() async {
     final t = AppLocalizations.of(context);
     final hadData = _products.isNotEmpty;
     setState(() {
@@ -135,19 +134,32 @@ class _ProductsScreenState extends State<ProductsScreen> {
       if (!hadData) _loading = true;
     });
     try {
-      final list = await _api.getProducts(
+      final q = _searchCtl.text.trim();
+      final minPrice = _priceUnlimited ? null : (_priceMinK * 1000).round();
+      final maxPrice = _priceUnlimited ? null : (_priceMaxK * 1000).round();
+      final data = await _api.getProductsPaged(
         categoryId: _selectedCatId,
+        searchTerm: q.isEmpty ? null : q,
+        minPrice: minPrice,
+        maxPrice: maxPrice,
+        sort: _sortKey(),
+        page: _page,
+        pageSize: _itemsPerPage,
+        organic: _activeCerts.contains('Hữu cơ') ? true : null,
+        local: _activeCerts.contains('Địa phương') ? true : null,
+        certAny: _activeCerts.contains('Chứng nhận') ? true : null,
       );
       if (!mounted) return;
       setState(() {
-        _products = List<Product>.from(list);
-        _page = 1;
+        _products = data.items;
+        _totalMatchingCount = data.totalCount;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = t.tr(vi: 'Không tải được sản phẩm.', en: 'Failed to load products.');
         _products = const [];
+        _totalMatchingCount = 0;
       });
     } finally {
       if (mounted) {
@@ -159,14 +171,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
   }
 
-  Map<int, int> get _categoryCounts {
-    final counts = <int, int>{};
-    for (final p in _allProducts) {
-      if (p.categoryId != null) counts[p.categoryId!] = (counts[p.categoryId!] ?? 0) + 1;
-    }
-    return counts;
-  }
-
   int get _activeFilterCount {
     var n = 0;
     if (_selectedCatId != null) n += 1;
@@ -175,53 +179,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
     return n;
   }
 
-  List<Product> get _filtered {
-    var list = List<Product>.from(_products);
-
-    final q = _searchCtl.text.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      list = list.where((p) => p.name.toLowerCase().contains(q)).toList();
-    }
-
-    if (!_priceUnlimited) {
-      final lo = _priceMinK * 1000;
-      final hi = _priceMaxK * 1000;
-      list = list.where((p) {
-        final v = _sellingPriceVnd(p);
-        return v >= lo && v <= hi;
-      }).toList();
-    }
-
-    if (_activeCerts.isNotEmpty) {
-      list = list.where((p) {
-        final name = p.name.toLowerCase();
-        return _activeCerts.any((cert) {
-          if (cert == 'Hữu cơ') return name.contains('organic') || name.contains('hữu cơ') || name.contains('cà chua');
-          if (cert == 'Địa phương') return name.contains('local') || name.contains('địa phương') || name.contains('cà rốt');
-          return cert == 'Chứng nhận';
-        });
-      }).toList();
-    }
-
-    list.sort((a, b) {
-      switch (_sortBy) {
-        case ProductSort.priceAsc:
-          return _sellingPriceVnd(a).compareTo(_sellingPriceVnd(b));
-        case ProductSort.priceDesc:
-          return _sellingPriceVnd(b).compareTo(_sellingPriceVnd(a));
-        case ProductSort.nameAsc:
-          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        case ProductSort.newest:
-          return (b.id).compareTo(a.id);
-      }
-    });
-
-    return list;
-  }
+  int get _totalPages => (_totalMatchingCount / _itemsPerPage).ceil().clamp(1, 1000000);
 
   Future<void> _openFilters() async {
     final theme = Theme.of(context);
-    final beforeCat = _selectedCatId;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -270,7 +231,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       const SizedBox(height: 10),
                       _CatRow(
                         title: 'Tất cả sản phẩm',
-                        count: _allProducts.length,
+                        count: _globalTotalCount,
                         active: _selectedCatId == null,
                         onTap: () => setLocal(() => _selectedCatId = null),
                       ),
@@ -395,7 +356,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                   _selectedCatId = null;
                                   _priceUnlimited = true;
                                   _activeCerts.clear();
-                                  _syncPriceBounds();
+                                  _priceMinK = 10;
+                                  _priceMaxK = _maxPriceK;
                                 });
                               },
                               style: OutlinedButton.styleFrom(
@@ -413,12 +375,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                               onPressed: () async {
                                 Navigator.of(context).pop();
                                 if (!mounted) return;
-                                // Price/certs/sort are client-side; only reload from API when category changes.
-                                if (beforeCat != _selectedCatId) {
-                                  await _loadProducts();
-                                } else {
-                                  setState(() => _page = 1);
-                                }
+                                setState(() => _page = 1);
+                                await _loadPaged();
                               },
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFF62BF39),
@@ -450,6 +408,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
     setState(() {
       _page = 1;
     });
+    // ignore: discarded_futures
+    _loadPaged();
   }
 
   String get _sortLabel {
@@ -468,11 +428,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final filtered = _filtered;
-    final totalPages = (filtered.length / _itemsPerPage).ceil().clamp(1, 1000000);
-    final start = (_page - 1) * _itemsPerPage;
-    final end = (start + _itemsPerPage).clamp(0, filtered.length);
-    final paged = (start >= filtered.length || start < 0) ? const <Product>[] : filtered.sublist(start, end);
+    final totalPages = _totalPages;
+    final paged = _products;
 
     return RefreshIndicator(
       onRefresh: _loadInit,
@@ -491,7 +448,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Có ${filtered.length} nông sản tươi ngon cho bạn lựa chọn.',
+                      'Có $_totalMatchingCount nông sản tươi ngon cho bạn lựa chọn.',
                       style: theme.textTheme.bodyMedium?.copyWith(color: const Color(0xFF4B5563), fontWeight: FontWeight.w700),
                     ),
                   ],
@@ -538,10 +495,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
               const SizedBox(width: 10),
               PopupMenuButton<ProductSort>(
                 tooltip: 'Sắp xếp',
-                onSelected: (v) => setState(() {
-                  _sortBy = v;
-                  _page = 1;
-                }),
+                onSelected: (v) {
+                  setState(() {
+                    _sortBy = v;
+                    _page = 1;
+                  });
+                  // ignore: discarded_futures
+                  _loadPaged();
+                },
                 itemBuilder: (context) => const [
                   PopupMenuItem(value: ProductSort.newest, child: Text('Mới nhất')),
                   PopupMenuItem(value: ProductSort.priceAsc, child: Text('Giá tăng dần')),
@@ -575,7 +536,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
             )
           else if (_error != null)
             _ErrorBox(message: _error!, onRetry: _loadInit)
-          else if (filtered.isEmpty && !_gridRefreshing)
+          else if (_totalMatchingCount == 0 && !_gridRefreshing)
             _EmptyBox(
               onClear: () {
                 setState(() {
@@ -586,8 +547,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   _page = 1;
                 });
                 _searchCtl.clear();
-                _syncPriceBounds();
-                _loadProducts();
+                setState(() {
+                  _priceMinK = 10;
+                  _priceMaxK = _maxPriceK;
+                });
+                // ignore: discarded_futures
+                _loadPaged();
               },
             )
           else
@@ -644,13 +609,25 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   ),
               ],
             ),
-          if (!_loading && _error == null && filtered.isNotEmpty) ...[
+          if (!_loading && _error == null && _totalMatchingCount > 0) ...[
             const SizedBox(height: 18),
             _Pager(
               page: _page,
               totalPages: totalPages,
-              onPrev: _page <= 1 ? null : () => setState(() => _page -= 1),
-              onNext: _page >= totalPages ? null : () => setState(() => _page += 1),
+              onPrev: _page <= 1
+                  ? null
+                  : () {
+                      setState(() => _page -= 1);
+                      // ignore: discarded_futures
+                      _loadPaged();
+                    },
+              onNext: _page >= totalPages
+                  ? null
+                  : () {
+                      setState(() => _page += 1);
+                      // ignore: discarded_futures
+                      _loadPaged();
+                    },
             ),
           ],
         ],

@@ -36,6 +36,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool _loading = false;
   String? _err;
   bool _placing = false;
+  String? _checkoutIdempotencyKey;
 
   List<ShippingMethod> _shippingMethods = const [];
   int? _shippingMethodId;
@@ -261,6 +262,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _err = null;
       });
 
+      _checkoutIdempotencyKey ??= '${DateTime.now().microsecondsSinceEpoch}-${lines.length}-${u?.userId ?? 0}';
+
       final res = await _api.createOrder(
         userId: isAuthed ? u.userId : null,
         guestCheckout: isAuthed ? null : GuestCheckoutDraft(fullName: fullName, email: email, phone: phone),
@@ -270,11 +273,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         paymentMethod: pay,
         voucherCode: (_voucherApplied?.code ?? _voucherCtl.text.trim()).trim().isEmpty ? null : (_voucherApplied?.code ?? _voucherCtl.text.trim()),
         items: items,
+        idempotencyKey: _checkoutIdempotencyKey,
       );
 
       if (!mounted) return;
 
       if (pay == 'COD') {
+        _checkoutIdempotencyKey = null;
         CartState.clear();
         await showDialog<void>(
           context: context,
@@ -330,6 +335,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         await Clipboard.setData(ClipboardData(text: url));
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Không mở được trang thanh toán. Đã copy link.')));
       } else {
+        _checkoutIdempotencyKey = null;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đang mở cổng thanh toán…')));
       }
     } catch (e) {
