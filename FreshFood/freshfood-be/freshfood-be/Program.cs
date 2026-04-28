@@ -14,6 +14,8 @@ using freshfood_be.Services.Security;
 using freshfood_be.Services.Orders;
 using freshfood_be.Services.AI;
 using System.Text;
+using CloudinaryDotNet;
+using freshfood_be.Services.Media;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -103,6 +105,40 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+
+// Cloudinary (optional) - used for image storage in production
+var cloudinaryUrl = (builder.Configuration["CLOUDINARY_URL"] ?? Environment.GetEnvironmentVariable("CLOUDINARY_URL") ?? string.Empty).Trim();
+if (!string.IsNullOrWhiteSpace(cloudinaryUrl))
+{
+    try
+    {
+        // CLOUDINARY_URL format: cloudinary://<api_key>:<api_secret>@<cloud_name>
+        var u = new Uri(cloudinaryUrl);
+        var cloudName = u.Host;
+        var userInfo = (u.UserInfo ?? string.Empty).Split(':', 2);
+        var apiKey = userInfo.Length > 0 ? userInfo[0] : string.Empty;
+        var apiSecret = userInfo.Length > 1 ? userInfo[1] : string.Empty;
+        if (string.IsNullOrWhiteSpace(cloudName) || string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(apiSecret))
+            throw new InvalidOperationException("CLOUDINARY_URL thiếu cloud_name/api_key/api_secret.");
+
+        var account = new Account(cloudName, apiKey, apiSecret);
+        var cloud = new Cloudinary(account) { Api = { Secure = true } };
+        builder.Services.AddSingleton(cloud);
+        var folder = (builder.Configuration["Cloudinary:Folder"] ?? Environment.GetEnvironmentVariable("Cloudinary__Folder") ?? "freshfood").Trim();
+        builder.Services.AddSingleton<IImageStorage>(_ => new CloudinaryImageStorage(cloud, folder));
+        Console.WriteLine("[INFO] Cloudinary image storage enabled.");
+    }
+    catch (Exception ex)
+    {
+        builder.Services.AddSingleton<IImageStorage, DisabledImageStorage>();
+        Console.WriteLine($"[WARN] CLOUDINARY_URL invalid. Image storage disabled. {ex.Message}");
+    }
+}
+else
+{
+    builder.Services.AddSingleton<IImageStorage, DisabledImageStorage>();
+    Console.WriteLine("[INFO] CLOUDINARY_URL missing. Image storage disabled.");
+}
 
 // Inventory reservation auto-release for abandoned online payments
 builder.Services.Configure<InventoryReservationOptions>(builder.Configuration.GetSection("InventoryReservation"));

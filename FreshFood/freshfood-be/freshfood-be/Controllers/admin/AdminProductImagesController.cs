@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using freshfood_be.Data;
 using freshfood_be.Models;
+using freshfood_be.Services.Media;
 
 namespace freshfood_be.Controllers;
 
@@ -14,11 +15,13 @@ public class AdminProductImagesController : ControllerBase
 {
     private readonly FreshFoodContext _context;
     private readonly IWebHostEnvironment _env;
+    private readonly IImageStorage _images;
 
-    public AdminProductImagesController(FreshFoodContext context, IWebHostEnvironment env)
+    public AdminProductImagesController(FreshFoodContext context, IWebHostEnvironment env, IImageStorage images)
     {
         _context = context;
         _env = env;
+        _images = images;
     }
 
     public sealed record UploadResultDto(int ImageID, string ImageURL, bool IsMainImage);
@@ -58,8 +61,9 @@ public class AdminProductImagesController : ControllerBase
                 return BadRequest("Only image files are allowed.");
         }
 
+        // Local folder is still used for dev environments without Cloudinary configured.
         var rootDir = Path.Combine(_env.ContentRootPath, "wwwroot", "product-images", productId.ToString());
-        Directory.CreateDirectory(rootDir);
+        if (!_images.IsEnabled) Directory.CreateDirectory(rootDir);
 
         // Nếu có chọn mainIndex, reset main image hiện tại trước (để đảm bảo 1 ảnh chính).
         if (mainIndex.HasValue && mainIndex.Value >= 0 && mainIndex.Value < files.Count)
@@ -75,17 +79,24 @@ public class AdminProductImagesController : ControllerBase
             var f = files[i];
             if (f.Length == 0) continue;
 
-            var ext = Path.GetExtension(f.FileName);
-            if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
-
-            var safeName = $"{Guid.NewGuid():N}{ext}";
-            var fullPath = Path.Combine(rootDir, safeName);
-            await using (var stream = System.IO.File.Create(fullPath))
+            string url;
+            if (_images.IsEnabled)
             {
-                await f.CopyToAsync(stream);
+                url = await _images.UploadProductImageAsync(productId, f, HttpContext.RequestAborted);
             }
+            else
+            {
+                var ext = Path.GetExtension(f.FileName);
+                if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
 
-            var url = $"/product-images/{productId}/{safeName}";
+                var safeName = $"{Guid.NewGuid():N}{ext}";
+                var fullPath = Path.Combine(rootDir, safeName);
+                await using (var stream = System.IO.File.Create(fullPath))
+                {
+                    await f.CopyToAsync(stream);
+                }
+                url = $"/product-images/{productId}/{safeName}";
+            }
             var isMain = mainIndex.HasValue && i == mainIndex.Value;
 
             // Nếu chưa có ảnh chính nào và client không chỉ định mainIndex → ảnh đầu tiên sẽ là main.
@@ -131,7 +142,7 @@ public class AdminProductImagesController : ControllerBase
         var img = await _context.ProductImages.FirstOrDefaultAsync(x => x.ImageID == imageId && x.ProductID == productId);
         if (img == null) return NotFound();
 
-        // delete file if it is local under /product-images
+        // best-effort delete (local file or Cloudinary if URL can be mapped)
         try
         {
             if (!string.IsNullOrWhiteSpace(img.ImageURL) && img.ImageURL.StartsWith("/product-images/", StringComparison.OrdinalIgnoreCase))
@@ -139,6 +150,10 @@ public class AdminProductImagesController : ControllerBase
                 var relative = img.ImageURL.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
                 var fullPath = Path.Combine(_env.ContentRootPath, "wwwroot", relative);
                 if (System.IO.File.Exists(fullPath)) System.IO.File.Delete(fullPath);
+            }
+            else if (!string.IsNullOrWhiteSpace(img.ImageURL))
+            {
+                await _images.TryDeleteByUrlAsync(img.ImageURL, HttpContext.RequestAborted);
             }
         }
         catch
