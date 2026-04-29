@@ -76,18 +76,60 @@ builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<freshfood_be.Services.Security.IdTokenService>();
 
-// Media storage: prefer Cloudinary when CLOUDINARY_URL is configured.
+// Media storage: prefer explicit Cloudinary vars to avoid URL parser pitfalls.
 builder.Services.AddSingleton<IImageStorage>(_ =>
 {
-    var cloudinaryUrl = (Environment.GetEnvironmentVariable("CLOUDINARY_URL")
-        ?? builder.Configuration["Cloudinary:Url"]
+    var cloudName = (Environment.GetEnvironmentVariable("CLOUDINARY_CLOUD_NAME")
+        ?? builder.Configuration["Cloudinary:CloudName"]
         ?? string.Empty).Trim();
-    if (string.IsNullOrWhiteSpace(cloudinaryUrl))
+    var apiKey = (Environment.GetEnvironmentVariable("CLOUDINARY_API_KEY")
+        ?? builder.Configuration["Cloudinary:ApiKey"]
+        ?? string.Empty).Trim();
+    var apiSecret = (Environment.GetEnvironmentVariable("CLOUDINARY_API_SECRET")
+        ?? builder.Configuration["Cloudinary:ApiSecret"]
+        ?? string.Empty).Trim();
+
+    if (string.IsNullOrWhiteSpace(cloudName) || string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(apiSecret))
     {
-        return new DisabledImageStorage();
+        // Backward-compatible fallback: CLOUDINARY_URL
+        var cloudinaryUrl = (Environment.GetEnvironmentVariable("CLOUDINARY_URL")
+            ?? builder.Configuration["Cloudinary:Url"]
+            ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(cloudinaryUrl))
+        {
+            Console.WriteLine("[INFO] Cloudinary is disabled (missing CLOUDINARY_* env vars).");
+            return new DisabledImageStorage();
+        }
+
+        try
+        {
+            var accountFromUrl = new Account(cloudinaryUrl);
+            if (string.IsNullOrWhiteSpace(accountFromUrl.Cloud) ||
+                string.IsNullOrWhiteSpace(accountFromUrl.ApiKey) ||
+                string.IsNullOrWhiteSpace(accountFromUrl.ApiSecret))
+            {
+                Console.WriteLine("[WARN] CLOUDINARY_URL parsed but missing fields. Falling back to disabled storage.");
+                return new DisabledImageStorage();
+            }
+
+            var cloudinaryFromUrl = new Cloudinary(accountFromUrl)
+            {
+                Api = { Secure = true }
+            };
+            var folderFromUrl = (Environment.GetEnvironmentVariable("CLOUDINARY_FOLDER")
+                ?? builder.Configuration["Cloudinary:Folder"]
+                ?? "freshfood").Trim();
+            Console.WriteLine($"[INFO] Cloudinary enabled via CLOUDINARY_URL. cloud={accountFromUrl.Cloud}, folder={folderFromUrl}");
+            return new CloudinaryImageStorage(cloudinaryFromUrl, folderFromUrl);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[WARN] Failed to parse CLOUDINARY_URL: {ex.Message}");
+            return new DisabledImageStorage();
+        }
     }
 
-    var account = new Account(cloudinaryUrl);
+    var account = new Account(cloudName, apiKey, apiSecret);
     var cloudinary = new Cloudinary(account)
     {
         Api = { Secure = true }
@@ -95,6 +137,7 @@ builder.Services.AddSingleton<IImageStorage>(_ =>
     var folder = (Environment.GetEnvironmentVariable("CLOUDINARY_FOLDER")
         ?? builder.Configuration["Cloudinary:Folder"]
         ?? "freshfood").Trim();
+    Console.WriteLine($"[INFO] Cloudinary enabled via CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET. cloud={cloudName}, folder={folder}");
     return new CloudinaryImageStorage(cloudinary, folder);
 });
 
