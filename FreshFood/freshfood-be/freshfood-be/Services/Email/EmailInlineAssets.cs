@@ -10,6 +10,9 @@ public static class EmailInlineAssets
 
     private static string WebRoot(IWebHostEnvironment env)
     {
+        var mediaRoot = (Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? "").Trim();
+        if (!string.IsNullOrWhiteSpace(mediaRoot))
+            return mediaRoot;
         if (!string.IsNullOrWhiteSpace(env.WebRootPath))
             return env.WebRootPath;
         return Path.Combine(env.ContentRootPath, "wwwroot");

@@ -13,6 +13,7 @@ using freshfood_be.Services.Security;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using freshfood_be.Services.Media;
 
 namespace freshfood_be.Controllers
 {
@@ -26,6 +27,7 @@ namespace freshfood_be.Controllers
         private readonly IEmailSender _emailSender;
         private readonly IConfiguration _configuration;
         private readonly IOptions<EmailSettings> _emailOptions;
+        private readonly IImageStorage _images;
 
         public AccountController(
             FreshFoodContext context,
@@ -33,7 +35,8 @@ namespace freshfood_be.Controllers
             ILogger<AccountController> logger,
             IEmailSender emailSender,
             IConfiguration configuration,
-            IOptions<EmailSettings> emailOptions)
+            IOptions<EmailSettings> emailOptions,
+            IImageStorage images)
         {
             _context = context;
             _env = env;
@@ -41,6 +44,15 @@ namespace freshfood_be.Controllers
             _emailSender = emailSender;
             _configuration = configuration;
             _emailOptions = emailOptions;
+            _images = images;
+        }
+
+        private string GetMediaRoot()
+        {
+            var configured = (Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(configured)
+                ? Path.Combine(_env.ContentRootPath, "wwwroot")
+                : configured;
         }
 
         public class RegisterDto
@@ -420,17 +432,24 @@ namespace freshfood_be.Controllers
             if (user == null) return NotFound("Không tìm thấy người dùng.");
 
             // Cùng thư mục với UseStaticFiles — tránh lưu nhầm vào bin/Debug khi GetCurrentDirectory() đổi
-            var avatarsDir = Path.Combine(_env.ContentRootPath, "wwwroot", "avatars");
-            Directory.CreateDirectory(avatarsDir);
-
-            var safeName = $"{id}_{DateTime.UtcNow:yyyyMMddHHmmssfff}{ext}";
-            var fullPath = Path.Combine(avatarsDir, safeName);
-            await using (var stream = System.IO.File.Create(fullPath))
+            if (_images.IsEnabled)
             {
-                await file.CopyToAsync(stream);
+                user.AvatarUrl = await _images.UploadImageAsync($"avatars/{id}", file, HttpContext.RequestAborted);
             }
+            else
+            {
+                var avatarsDir = Path.Combine(GetMediaRoot(), "avatars");
+                Directory.CreateDirectory(avatarsDir);
 
-            user.AvatarUrl = $"/avatars/{safeName}";
+                var safeName = $"{id}_{DateTime.UtcNow:yyyyMMddHHmmssfff}{ext}";
+                var fullPath = Path.Combine(avatarsDir, safeName);
+                await using (var stream = System.IO.File.Create(fullPath))
+                {
+                    await file.CopyToAsync(stream);
+                }
+
+                user.AvatarUrl = $"/avatars/{safeName}";
+            }
             await _context.SaveChangesAsync();
 
             return Ok(user);

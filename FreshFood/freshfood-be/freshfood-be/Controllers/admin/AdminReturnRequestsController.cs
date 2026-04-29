@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using freshfood_be.Data;
+using freshfood_be.Services.Media;
 
 namespace freshfood_be.Controllers;
 
@@ -13,12 +14,22 @@ public class AdminReturnRequestsController : ControllerBase
     private readonly FreshFoodContext _context;
     private readonly IWebHostEnvironment _env;
     private readonly freshfood_be.Services.Security.IdTokenService _idTokens;
+    private readonly IImageStorage _images;
 
-    public AdminReturnRequestsController(FreshFoodContext context, IWebHostEnvironment env, freshfood_be.Services.Security.IdTokenService idTokens)
+    public AdminReturnRequestsController(FreshFoodContext context, IWebHostEnvironment env, freshfood_be.Services.Security.IdTokenService idTokens, IImageStorage images)
     {
         _context = context;
         _env = env;
         _idTokens = idTokens;
+        _images = images;
+    }
+
+    private string GetMediaRoot()
+    {
+        var configured = (Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(configured)
+            ? Path.Combine(_env.ContentRootPath, "wwwroot")
+            : configured;
     }
 
     public record ReturnImageDto(int ReturnRequestImageID, string ImageUrl);
@@ -177,16 +188,22 @@ public class AdminReturnRequestsController : ControllerBase
         if (string.IsNullOrWhiteSpace(file.ContentType) || !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
             return BadRequest("Only image files are allowed.");
 
-        var safeName = $"{DateTime.UtcNow:yyyyMMddHHmmssfff}{ext}";
-        var dir = Path.Combine(_env.ContentRootPath, "wwwroot", "return-refund-proofs", rr.OrderID.ToString(), rr.ReturnRequestID.ToString());
-        Directory.CreateDirectory(dir);
-        var fullPath = Path.Combine(dir, safeName);
-        await using (var fs = System.IO.File.Create(fullPath))
+        if (_images.IsEnabled)
         {
-            await file.CopyToAsync(fs);
+            rr.RefundProofUrl = await _images.UploadImageAsync($"return-refund-proofs/{rr.OrderID}/{rr.ReturnRequestID}", file, HttpContext.RequestAborted);
         }
-
-        rr.RefundProofUrl = $"/return-refund-proofs/{rr.OrderID}/{rr.ReturnRequestID}/{safeName}";
+        else
+        {
+            var safeName = $"{DateTime.UtcNow:yyyyMMddHHmmssfff}{ext}";
+            var dir = Path.Combine(GetMediaRoot(), "return-refund-proofs", rr.OrderID.ToString(), rr.ReturnRequestID.ToString());
+            Directory.CreateDirectory(dir);
+            var fullPath = Path.Combine(dir, safeName);
+            await using (var fs = System.IO.File.Create(fullPath))
+            {
+                await file.CopyToAsync(fs);
+            }
+            rr.RefundProofUrl = $"/return-refund-proofs/{rr.OrderID}/{rr.ReturnRequestID}/{safeName}";
+        }
         rr.RefundNote = note;
         rr.ReviewedAt ??= DateTime.UtcNow;
 

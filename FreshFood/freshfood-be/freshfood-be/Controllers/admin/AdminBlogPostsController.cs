@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using freshfood_be.Data;
 using freshfood_be.Models;
+using freshfood_be.Services.Media;
 
 namespace freshfood_be.Controllers
 {
@@ -15,12 +16,22 @@ namespace freshfood_be.Controllers
         private readonly FreshFoodContext _context;
         private readonly IWebHostEnvironment _env;
         private readonly freshfood_be.Services.Security.IdTokenService _idTokens;
+        private readonly IImageStorage _images;
 
-        public AdminBlogPostsController(FreshFoodContext context, IWebHostEnvironment env, freshfood_be.Services.Security.IdTokenService idTokens)
+        public AdminBlogPostsController(FreshFoodContext context, IWebHostEnvironment env, freshfood_be.Services.Security.IdTokenService idTokens, IImageStorage images)
         {
             _context = context;
             _env = env;
             _idTokens = idTokens;
+            _images = images;
+        }
+
+        private string GetMediaRoot()
+        {
+            var configured = (Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(configured)
+                ? Path.Combine(_env.ContentRootPath, "wwwroot")
+                : configured;
         }
 
         public record BlogPostDto(
@@ -63,17 +74,24 @@ namespace freshfood_be.Controllers
             if (string.IsNullOrWhiteSpace(file.ContentType) || !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
                 return BadRequest("Only image files are allowed.");
 
-            var rootDir = Path.Combine(_env.ContentRootPath, "wwwroot", "blog-covers");
-            Directory.CreateDirectory(rootDir);
-
-            var safeName = $"{Guid.NewGuid():N}{ext}";
-            var fullPath = Path.Combine(rootDir, safeName);
-            await using (var stream = System.IO.File.Create(fullPath))
+            string url;
+            if (_images.IsEnabled)
             {
-                await file.CopyToAsync(stream);
+                url = await _images.UploadImageAsync("blog-covers", file, HttpContext.RequestAborted);
             }
+            else
+            {
+                var rootDir = Path.Combine(GetMediaRoot(), "blog-covers");
+                Directory.CreateDirectory(rootDir);
 
-            var url = $"/blog-covers/{safeName}";
+                var safeName = $"{Guid.NewGuid():N}{ext}";
+                var fullPath = Path.Combine(rootDir, safeName);
+                await using (var stream = System.IO.File.Create(fullPath))
+                {
+                    await file.CopyToAsync(stream);
+                }
+                url = $"/blog-covers/{safeName}";
+            }
             return Ok(new UploadCoverResultDto(url));
         }
 

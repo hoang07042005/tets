@@ -24,6 +24,14 @@ public class AdminProductImagesController : ControllerBase
         _images = images;
     }
 
+    private string GetMediaRoot()
+    {
+        var configured = (Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(configured)
+            ? Path.Combine(_env.ContentRootPath, "wwwroot")
+            : configured;
+    }
+
     public sealed record UploadResultDto(int ImageID, string ImageURL, bool IsMainImage);
 
     // POST: api/Admin/Products/{id}/Images (multipart/form-data: field "files")
@@ -62,7 +70,7 @@ public class AdminProductImagesController : ControllerBase
         }
 
         // Local folder is still used for dev environments without Cloudinary configured.
-        var rootDir = Path.Combine(_env.ContentRootPath, "wwwroot", "product-images", productId.ToString());
+        var rootDir = Path.Combine(GetMediaRoot(), "product-images", productId.ToString());
         if (!_images.IsEnabled) Directory.CreateDirectory(rootDir);
 
         // Nếu có chọn mainIndex, reset main image hiện tại trước (để đảm bảo 1 ảnh chính).
@@ -148,7 +156,7 @@ public class AdminProductImagesController : ControllerBase
             if (!string.IsNullOrWhiteSpace(img.ImageURL) && img.ImageURL.StartsWith("/product-images/", StringComparison.OrdinalIgnoreCase))
             {
                 var relative = img.ImageURL.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-                var fullPath = Path.Combine(_env.ContentRootPath, "wwwroot", relative);
+                var fullPath = Path.Combine(GetMediaRoot(), relative);
                 if (System.IO.File.Exists(fullPath)) System.IO.File.Delete(fullPath);
             }
             else if (!string.IsNullOrWhiteSpace(img.ImageURL))

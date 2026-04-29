@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using freshfood_be.Data;
 using freshfood_be.Models;
 using freshfood_be.Services.Security;
+using freshfood_be.Services.Media;
 
 namespace freshfood_be.Controllers;
 
@@ -16,12 +17,22 @@ public class AdminSupplierController : ControllerBase
     private readonly FreshFoodContext _context;
     private readonly IWebHostEnvironment _env;
     private readonly AdminAuditLogger _audit;
+    private readonly IImageStorage _images;
 
-    public AdminSupplierController(FreshFoodContext context, IWebHostEnvironment env, AdminAuditLogger audit)
+    public AdminSupplierController(FreshFoodContext context, IWebHostEnvironment env, AdminAuditLogger audit, IImageStorage images)
     {
         _context = context;
         _env = env;
         _audit = audit;
+        _images = images;
+    }
+
+    private string GetMediaRoot()
+    {
+        var configured = (Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(configured)
+            ? Path.Combine(_env.ContentRootPath, "wwwroot")
+            : configured;
     }
 
     public record AdminSupplierRowDto(
@@ -79,17 +90,25 @@ public class AdminSupplierController : ControllerBase
         if (string.IsNullOrWhiteSpace(file.ContentType) || !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
             return BadRequest("Only image files are allowed.");
 
-        var rootDir = Path.Combine(_env.ContentRootPath, "wwwroot", "supplier-assets");
-        Directory.CreateDirectory(rootDir);
-
-        var safeName = $"{Guid.NewGuid():N}{ext}";
-        var fullPath = Path.Combine(rootDir, safeName);
-        await using (var stream = System.IO.File.Create(fullPath))
+        string url;
+        if (_images.IsEnabled)
         {
-            await file.CopyToAsync(stream, ct);
+            url = await _images.UploadImageAsync("supplier-assets", file, ct);
         }
+        else
+        {
+            var rootDir = Path.Combine(GetMediaRoot(), "supplier-assets");
+            Directory.CreateDirectory(rootDir);
 
-        var url = $"/supplier-assets/{safeName}";
+            var safeName = $"{Guid.NewGuid():N}{ext}";
+            var fullPath = Path.Combine(rootDir, safeName);
+            await using (var stream = System.IO.File.Create(fullPath))
+            {
+                await file.CopyToAsync(stream, ct);
+            }
+
+            url = $"/supplier-assets/{safeName}";
+        }
 
         await _audit.LogAsync(
             action: "suppliers.upload_image",

@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Logging;
+using CloudinaryDotNet;
 using freshfood_be.Data;
 using System.Diagnostics;
 using System.IO;
@@ -13,9 +15,8 @@ using freshfood_be.Services.Momo;
 using freshfood_be.Services.Security;
 using freshfood_be.Services.Orders;
 using freshfood_be.Services.AI;
-using System.Text;
-using CloudinaryDotNet;
 using freshfood_be.Services.Media;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -75,6 +76,28 @@ builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<freshfood_be.Services.Security.IdTokenService>();
 
+// Media storage: prefer Cloudinary when CLOUDINARY_URL is configured.
+builder.Services.AddSingleton<IImageStorage>(_ =>
+{
+    var cloudinaryUrl = (Environment.GetEnvironmentVariable("CLOUDINARY_URL")
+        ?? builder.Configuration["Cloudinary:Url"]
+        ?? string.Empty).Trim();
+    if (string.IsNullOrWhiteSpace(cloudinaryUrl))
+    {
+        return new DisabledImageStorage();
+    }
+
+    var account = new Account(cloudinaryUrl);
+    var cloudinary = new Cloudinary(account)
+    {
+        Api = { Secure = true }
+    };
+    var folder = (Environment.GetEnvironmentVariable("CLOUDINARY_FOLDER")
+        ?? builder.Configuration["Cloudinary:Folder"]
+        ?? "freshfood").Trim();
+    return new CloudinaryImageStorage(cloudinary, folder);
+});
+
 // AI Service
 builder.Services.AddHttpClient<IAIService, AIService>();
 
@@ -105,40 +128,6 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
-
-// Cloudinary (optional) - used for image storage in production
-var cloudinaryUrl = (builder.Configuration["CLOUDINARY_URL"] ?? Environment.GetEnvironmentVariable("CLOUDINARY_URL") ?? string.Empty).Trim();
-if (!string.IsNullOrWhiteSpace(cloudinaryUrl))
-{
-    try
-    {
-        // CLOUDINARY_URL format: cloudinary://<api_key>:<api_secret>@<cloud_name>
-        var u = new Uri(cloudinaryUrl);
-        var cloudName = u.Host;
-        var userInfo = (u.UserInfo ?? string.Empty).Split(':', 2);
-        var apiKey = userInfo.Length > 0 ? userInfo[0] : string.Empty;
-        var apiSecret = userInfo.Length > 1 ? userInfo[1] : string.Empty;
-        if (string.IsNullOrWhiteSpace(cloudName) || string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(apiSecret))
-            throw new InvalidOperationException("CLOUDINARY_URL thiếu cloud_name/api_key/api_secret.");
-
-        var account = new Account(cloudName, apiKey, apiSecret);
-        var cloud = new Cloudinary(account) { Api = { Secure = true } };
-        builder.Services.AddSingleton(cloud);
-        var folder = (builder.Configuration["Cloudinary:Folder"] ?? Environment.GetEnvironmentVariable("Cloudinary__Folder") ?? "freshfood").Trim();
-        builder.Services.AddSingleton<IImageStorage>(_ => new CloudinaryImageStorage(cloud, folder));
-        Console.WriteLine("[INFO] Cloudinary image storage enabled.");
-    }
-    catch (Exception ex)
-    {
-        builder.Services.AddSingleton<IImageStorage, DisabledImageStorage>();
-        Console.WriteLine($"[WARN] CLOUDINARY_URL invalid. Image storage disabled. {ex.Message}");
-    }
-}
-else
-{
-    builder.Services.AddSingleton<IImageStorage, DisabledImageStorage>();
-    Console.WriteLine("[INFO] CLOUDINARY_URL missing. Image storage disabled.");
-}
 
 // Inventory reservation auto-release for abandoned online payments
 builder.Services.Configure<InventoryReservationOptions>(builder.Configuration.GetSection("InventoryReservation"));
@@ -185,21 +174,39 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-// Ensure wwwroot exists for static files (review images upload)
-Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "wwwroot"));
-Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "wwwroot", "review-images"));
-Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "wwwroot", "avatars"));
-Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "wwwroot", "product-images"));
-Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "wwwroot", "email-assets"));
-Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "wwwroot", "blog-covers"));
-Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "wwwroot", "supplier-assets"));
-Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "wwwroot", "return-images"));
-Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "wwwroot", "return-videos"));
-Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "wwwroot", "return-refund-proofs"));
+// Media root (Render persistent disk supported via MEDIA_ROOT)
+var mediaRoot = (Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? string.Empty).Trim();
+if (string.IsNullOrWhiteSpace(mediaRoot))
+{
+    mediaRoot = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+}
+
+Directory.CreateDirectory(mediaRoot);
+Directory.CreateDirectory(Path.Combine(mediaRoot, "review-images"));
+Directory.CreateDirectory(Path.Combine(mediaRoot, "avatars"));
+Directory.CreateDirectory(Path.Combine(mediaRoot, "product-images"));
+Directory.CreateDirectory(Path.Combine(mediaRoot, "email-assets"));
+Directory.CreateDirectory(Path.Combine(mediaRoot, "blog-covers"));
+Directory.CreateDirectory(Path.Combine(mediaRoot, "supplier-assets"));
+Directory.CreateDirectory(Path.Combine(mediaRoot, "return-images"));
+Directory.CreateDirectory(Path.Combine(mediaRoot, "return-videos"));
+Directory.CreateDirectory(Path.Combine(mediaRoot, "return-refund-proofs"));
 
 // Trang chủ / — thông báo backend đã chạy
 app.UseDefaultFiles();
-app.UseStaticFiles();
+if (string.Equals(Path.GetFullPath(mediaRoot), Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "wwwroot")), StringComparison.OrdinalIgnoreCase))
+{
+    app.UseStaticFiles();
+}
+else
+{
+    // Serve files from persistent disk with root-relative URLs (/product-images/..., /avatars/...)
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(mediaRoot),
+        RequestPath = ""
+    });
+}
 
 app.UseCors("AllowFrontend");
 

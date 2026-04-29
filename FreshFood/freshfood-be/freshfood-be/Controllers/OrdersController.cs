@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using freshfood_be.Data;
 using freshfood_be.Models;
 using freshfood_be.Services.Email;
+using freshfood_be.Services.Media;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Net;
@@ -30,6 +31,7 @@ namespace freshfood_be.Controllers
         private readonly IWebHostEnvironment _env;
         private readonly IOptions<EmailSettings> _emailOptions;
         private readonly freshfood_be.Services.Security.IdTokenService _idTokens;
+        private readonly IImageStorage _images;
 
         public OrdersController(
             FreshFoodContext context,
@@ -38,7 +40,8 @@ namespace freshfood_be.Controllers
             ILogger<OrdersController> logger,
             IWebHostEnvironment env,
             IOptions<EmailSettings> emailOptions,
-            freshfood_be.Services.Security.IdTokenService idTokens)
+            freshfood_be.Services.Security.IdTokenService idTokens,
+            IImageStorage images)
         {
             _context = context;
             _emailSender = emailSender;
@@ -47,6 +50,15 @@ namespace freshfood_be.Controllers
             _env = env;
             _emailOptions = emailOptions;
             _idTokens = idTokens;
+            _images = images;
+        }
+
+        private string GetMediaRoot()
+        {
+            var configured = (Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(configured)
+                ? Path.Combine(_env.ContentRootPath, "wwwroot")
+                : configured;
         }
 
         private int? GetAuthUserId()
@@ -998,46 +1010,54 @@ namespace freshfood_be.Controllers
             _context.ReturnRequests.Add(rr);
             await _context.SaveChangesAsync();
 
-            var rootDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "wwwroot", "return-images", id.ToString(), rr.ReturnRequestID.ToString());
-            rootDir = Path.GetFullPath(rootDir);
-            Directory.CreateDirectory(rootDir);
-
             // Save video if provided
             if (video != null && video.Length > 0)
             {
-                var vDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "wwwroot", "return-videos", id.ToString(), rr.ReturnRequestID.ToString());
-                vDir = Path.GetFullPath(vDir);
-                Directory.CreateDirectory(vDir);
-
                 var ext = Path.GetExtension(video.FileName);
                 if (string.IsNullOrWhiteSpace(ext)) ext = ".mp4";
-                var safeName = $"video-{Guid.NewGuid():N}{ext}";
-                var fullPath = Path.Combine(vDir, safeName);
-                await using (var stream = System.IO.File.Create(fullPath))
+                if (_images.IsEnabled)
                 {
-                    await video.CopyToAsync(stream);
+                    rr.VideoUrl = await _images.UploadVideoAsync($"return-videos/{id}/{rr.ReturnRequestID}", video, HttpContext.RequestAborted);
                 }
-
-                rr.VideoUrl = $"/return-videos/{id}/{rr.ReturnRequestID}/{safeName}";
+                else
+                {
+                    var vDir = Path.Combine(GetMediaRoot(), "return-videos", id.ToString(), rr.ReturnRequestID.ToString());
+                    Directory.CreateDirectory(vDir);
+                    var safeName = $"video-{Guid.NewGuid():N}{ext}";
+                    var fullPath = Path.Combine(vDir, safeName);
+                    await using (var stream = System.IO.File.Create(fullPath))
+                    {
+                        await video.CopyToAsync(stream);
+                    }
+                    rr.VideoUrl = $"/return-videos/{id}/{rr.ReturnRequestID}/{safeName}";
+                }
                 await _context.SaveChangesAsync();
             }
 
             if (files != null)
             {
+                var rootDir = Path.Combine(GetMediaRoot(), "return-images", id.ToString(), rr.ReturnRequestID.ToString());
+                if (!_images.IsEnabled) Directory.CreateDirectory(rootDir);
                 foreach (var f in files)
                 {
                     if (f.Length == 0) continue;
                     var ext = Path.GetExtension(f.FileName);
                     if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
-
-                    var safeName = $"{Guid.NewGuid():N}{ext}";
-                    var fullPath = Path.Combine(rootDir, safeName);
-                    await using (var stream = System.IO.File.Create(fullPath))
+                    string url;
+                    if (_images.IsEnabled)
                     {
-                        await f.CopyToAsync(stream);
+                        url = await _images.UploadImageAsync($"return-images/{id}/{rr.ReturnRequestID}", f, HttpContext.RequestAborted);
                     }
-
-                    var url = $"/return-images/{id}/{rr.ReturnRequestID}/{safeName}";
+                    else
+                    {
+                        var safeName = $"{Guid.NewGuid():N}{ext}";
+                        var fullPath = Path.Combine(rootDir, safeName);
+                        await using (var stream = System.IO.File.Create(fullPath))
+                        {
+                            await f.CopyToAsync(stream);
+                        }
+                        url = $"/return-images/{id}/{rr.ReturnRequestID}/{safeName}";
+                    }
                     _context.ReturnRequestImages.Add(new ReturnRequestImage { ReturnRequestID = rr.ReturnRequestID, ImageUrl = url });
                 }
                 await _context.SaveChangesAsync();

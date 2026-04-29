@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using freshfood_be.Data;
 using freshfood_be.Models;
 using freshfood_be.Services.Security;
+using freshfood_be.Services.Media;
 
 namespace freshfood_be.Controllers;
 
@@ -16,12 +17,22 @@ public class AdminHomePageController : ControllerBase
     private readonly FreshFoodContext _context;
     private readonly IWebHostEnvironment _env;
     private readonly AdminAuditLogger _audit;
+    private readonly IImageStorage _images;
 
-    public AdminHomePageController(FreshFoodContext context, IWebHostEnvironment env, AdminAuditLogger audit)
+    public AdminHomePageController(FreshFoodContext context, IWebHostEnvironment env, AdminAuditLogger audit, IImageStorage images)
     {
         _context = context;
         _env = env;
         _audit = audit;
+        _images = images;
+    }
+
+    private string GetMediaRoot()
+    {
+        var configured = (Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(configured)
+            ? Path.Combine(_env.ContentRootPath, "wwwroot")
+            : configured;
     }
 
     public sealed record HomeHeroDto(
@@ -99,13 +110,18 @@ public class AdminHomePageController : ControllerBase
         return set;
     }
 
-    private void TryDeleteHomeAsset(string normalizedUrlPath)
+    private async Task TryDeleteHomeAssetAsync(string normalizedUrlPath, CancellationToken ct)
     {
+        if (_images.IsEnabled && Uri.TryCreate(normalizedUrlPath, UriKind.Absolute, out _))
+        {
+            await _images.TryDeleteByUrlAsync(normalizedUrlPath, ct);
+            return;
+        }
         try
         {
             var rel = normalizedUrlPath.Trim().TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-            var full = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "wwwroot", rel));
-            var root = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "wwwroot", "home-assets"));
+            var full = Path.GetFullPath(Path.Combine(GetMediaRoot(), rel));
+            var root = Path.GetFullPath(Path.Combine(GetMediaRoot(), "home-assets"));
             if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return;
             if (System.IO.File.Exists(full)) System.IO.File.Delete(full);
         }
@@ -131,17 +147,25 @@ public class AdminHomePageController : ControllerBase
         if (string.IsNullOrWhiteSpace(file.ContentType) || !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
             return BadRequest("Only image files are allowed.");
 
-        var rootDir = Path.Combine(_env.ContentRootPath, "wwwroot", "home-assets");
-        Directory.CreateDirectory(rootDir);
-
-        var safeName = $"{Guid.NewGuid():N}{ext}";
-        var fullPath = Path.Combine(rootDir, safeName);
-        await using (var stream = System.IO.File.Create(fullPath))
+        string url;
+        if (_images.IsEnabled)
         {
-            await file.CopyToAsync(stream, ct);
+            url = await _images.UploadImageAsync("home-assets", file, ct);
         }
+        else
+        {
+            var rootDir = Path.Combine(GetMediaRoot(), "home-assets");
+            Directory.CreateDirectory(rootDir);
 
-        var url = $"/home-assets/{safeName}";
+            var safeName = $"{Guid.NewGuid():N}{ext}";
+            var fullPath = Path.Combine(rootDir, safeName);
+            await using (var stream = System.IO.File.Create(fullPath))
+            {
+                await file.CopyToAsync(stream, ct);
+            }
+
+            url = $"/home-assets/{safeName}";
+        }
 
         await _audit.LogAsync(
             action: "home.upload_image",
@@ -213,7 +237,7 @@ public class AdminHomePageController : ControllerBase
         {
             if (!newAssets.Contains(oldUrl))
             {
-                TryDeleteHomeAsset(oldUrl);
+                await TryDeleteHomeAssetAsync(oldUrl, ct);
                 removed.Add(oldUrl);
             }
         }

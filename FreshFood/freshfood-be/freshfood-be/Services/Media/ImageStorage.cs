@@ -7,6 +7,8 @@ namespace freshfood_be.Services.Media;
 public interface IImageStorage
 {
     bool IsEnabled { get; }
+    Task<string> UploadImageAsync(string folder, IFormFile file, CancellationToken ct);
+    Task<string> UploadVideoAsync(string folder, IFormFile file, CancellationToken ct);
     Task<string> UploadProductImageAsync(int productId, IFormFile file, CancellationToken ct);
     Task<string> UploadProductImageFromPathAsync(int productId, string filePath, CancellationToken ct);
     Task TryDeleteByUrlAsync(string url, CancellationToken ct);
@@ -25,19 +27,18 @@ public sealed class CloudinaryImageStorage : IImageStorage
 
     public bool IsEnabled => true;
 
-    public async Task<string> UploadProductImageAsync(int productId, IFormFile file, CancellationToken ct)
+    public async Task<string> UploadImageAsync(string folder, IFormFile file, CancellationToken ct)
     {
         await using var stream = file.OpenReadStream();
         var ext = Path.GetExtension(file.FileName);
-        var publicId = $"{_folder}/products/{productId}/{Guid.NewGuid():N}{ext}";
-        publicId = publicId.Replace("\\", "/");
+        var safeFolder = string.IsNullOrWhiteSpace(folder) ? "misc" : folder.Trim().Trim('/');
+        var publicId = $"{_folder}/{safeFolder}/{Guid.NewGuid():N}{ext}".Replace("\\", "/");
 
         var uploadParams = new ImageUploadParams
         {
             File = new FileDescription(file.FileName, stream),
             PublicId = publicId,
             Overwrite = false,
-            // Basic optimization defaults
             Transformation = new Transformation().Quality("auto").FetchFormat("auto")
         };
 
@@ -49,6 +50,35 @@ public sealed class CloudinaryImageStorage : IImageStorage
         }
 
         return res.SecureUrl.ToString();
+    }
+
+    public async Task<string> UploadVideoAsync(string folder, IFormFile file, CancellationToken ct)
+    {
+        await using var stream = file.OpenReadStream();
+        var ext = Path.GetExtension(file.FileName);
+        var safeFolder = string.IsNullOrWhiteSpace(folder) ? "videos" : folder.Trim().Trim('/');
+        var publicId = $"{_folder}/{safeFolder}/{Guid.NewGuid():N}{ext}".Replace("\\", "/");
+
+        var uploadParams = new VideoUploadParams
+        {
+            File = new FileDescription(file.FileName, stream),
+            PublicId = publicId,
+            Overwrite = false
+        };
+
+        var res = await _cloudinary.UploadAsync(uploadParams, ct);
+        if (res == null || res.StatusCode != System.Net.HttpStatusCode.OK || string.IsNullOrWhiteSpace(res.SecureUrl?.ToString()))
+        {
+            var msg = res?.Error?.Message;
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(msg) ? "Upload video thất bại (Cloudinary)." : msg);
+        }
+
+        return res.SecureUrl.ToString();
+    }
+
+    public async Task<string> UploadProductImageAsync(int productId, IFormFile file, CancellationToken ct)
+    {
+        return await UploadImageAsync($"products/{productId}", file, ct);
     }
 
     public async Task<string> UploadProductImageFromPathAsync(int productId, string filePath, CancellationToken ct)
@@ -124,6 +154,10 @@ public sealed class CloudinaryImageStorage : IImageStorage
 public sealed class DisabledImageStorage : IImageStorage
 {
     public bool IsEnabled => false;
+    public Task<string> UploadImageAsync(string folder, IFormFile file, CancellationToken ct) =>
+        throw new InvalidOperationException("Image storage is not configured.");
+    public Task<string> UploadVideoAsync(string folder, IFormFile file, CancellationToken ct) =>
+        throw new InvalidOperationException("Image storage is not configured.");
     public Task<string> UploadProductImageAsync(int productId, IFormFile file, CancellationToken ct) =>
         throw new InvalidOperationException("Image storage is not configured.");
 

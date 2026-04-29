@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using freshfood_be.Data;
 using System.IO;
+using freshfood_be.Services.Media;
 
 namespace freshfood_be.Controllers
 {
@@ -12,10 +13,22 @@ namespace freshfood_be.Controllers
     public class ReviewsController : ControllerBase
     {
         private readonly FreshFoodContext _context;
+        private readonly IWebHostEnvironment _env;
+        private readonly IImageStorage _images;
 
-        public ReviewsController(FreshFoodContext context)
+        public ReviewsController(FreshFoodContext context, IWebHostEnvironment env, IImageStorage images)
         {
             _context = context;
+            _env = env;
+            _images = images;
+        }
+
+        private string GetMediaRoot()
+        {
+            var configured = (Environment.GetEnvironmentVariable("MEDIA_ROOT") ?? string.Empty).Trim();
+            return string.IsNullOrWhiteSpace(configured)
+                ? Path.Combine(_env.ContentRootPath, "wwwroot")
+                : configured;
         }
 
         public sealed record ReviewDto(
@@ -83,9 +96,6 @@ namespace freshfood_be.Controllers
             if (files == null || files.Count == 0) return Ok(Array.Empty<string>());
             if (files.Count > 3) return BadRequest("Maximum 3 images.");
 
-            var root = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "review-images");
-            Directory.CreateDirectory(root);
-
             var urls = new List<string>();
             foreach (var f in files)
             {
@@ -96,14 +106,23 @@ namespace freshfood_be.Controllers
                 var ext = Path.GetExtension(f.FileName);
                 if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
 
-                var fileName = $"{Guid.NewGuid():N}{ext}";
-                var fullPath = Path.Combine(root, fileName);
-                await using (var stream = System.IO.File.Create(fullPath))
+                if (_images.IsEnabled)
                 {
-                    await f.CopyToAsync(stream);
+                    var remote = await _images.UploadImageAsync("review-images", f, HttpContext.RequestAborted);
+                    urls.Add(remote);
                 }
-
-                urls.Add($"/review-images/{fileName}");
+                else
+                {
+                    var root = Path.Combine(GetMediaRoot(), "review-images");
+                    Directory.CreateDirectory(root);
+                    var fileName = $"{Guid.NewGuid():N}{ext}";
+                    var fullPath = Path.Combine(root, fileName);
+                    await using (var stream = System.IO.File.Create(fullPath))
+                    {
+                        await f.CopyToAsync(stream);
+                    }
+                    urls.Add($"/review-images/{fileName}");
+                }
             }
 
             return Ok(urls);
