@@ -16,12 +16,14 @@ public class AdminProductImagesController : ControllerBase
     private readonly FreshFoodContext _context;
     private readonly IWebHostEnvironment _env;
     private readonly IImageStorage _images;
+    private readonly ILogger<AdminProductImagesController> _logger;
 
-    public AdminProductImagesController(FreshFoodContext context, IWebHostEnvironment env, IImageStorage images)
+    public AdminProductImagesController(FreshFoodContext context, IWebHostEnvironment env, IImageStorage images, ILogger<AdminProductImagesController> logger)
     {
         _context = context;
         _env = env;
         _images = images;
+        _logger = logger;
     }
 
     private string GetMediaRoot()
@@ -110,6 +112,9 @@ public class AdminProductImagesController : ControllerBase
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex,
+                    "Product image upload failed. productId={ProductId}, fileName={FileName}, storageEnabled={StorageEnabled}",
+                    productId, f.FileName, _images.IsEnabled);
                 return StatusCode(500, new
                 {
                     message = "Upload ảnh thất bại.",
