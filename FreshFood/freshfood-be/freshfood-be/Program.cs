@@ -151,9 +151,33 @@ builder.Services.AddCors(options =>
         }
         else
         {
-            policy.WithOrigins("http://localhost:5173") // Default Vite port
-                  .AllowAnyHeader()
-                  .AllowAnyMethod();
+            var configuredOrigins = (Environment.GetEnvironmentVariable("FRONTEND_ORIGINS")
+                ?? builder.Configuration["Frontend:AllowedOrigins"]
+                ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToArray();
+
+            if (configuredOrigins.Length > 0)
+            {
+                policy.WithOrigins(configuredOrigins)
+                      .AllowAnyHeader()
+                      .AllowAnyMethod();
+            }
+            else
+            {
+                // Render-free friendly defaults when env var is not provided.
+                policy
+                    .SetIsOriginAllowed(origin =>
+                    {
+                        if (string.IsNullOrWhiteSpace(origin)) return false;
+                        if (!Uri.TryCreate(origin, UriKind.Absolute, out var u)) return false;
+                        if (u.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)) return true;
+                        return u.Host.EndsWith(".onrender.com", StringComparison.OrdinalIgnoreCase);
+                    })
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
+            }
         }
     });
 });
