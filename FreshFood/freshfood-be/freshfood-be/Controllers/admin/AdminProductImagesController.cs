@@ -88,22 +88,33 @@ public class AdminProductImagesController : ControllerBase
             if (f.Length == 0) continue;
 
             string url;
-            if (_images.IsEnabled)
+            try
             {
-                url = await _images.UploadProductImageAsync(productId, f, HttpContext.RequestAborted);
-            }
-            else
-            {
-                var ext = Path.GetExtension(f.FileName);
-                if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
-
-                var safeName = $"{Guid.NewGuid():N}{ext}";
-                var fullPath = Path.Combine(rootDir, safeName);
-                await using (var stream = System.IO.File.Create(fullPath))
+                if (_images.IsEnabled)
                 {
-                    await f.CopyToAsync(stream);
+                    url = await _images.UploadProductImageAsync(productId, f, HttpContext.RequestAborted);
                 }
-                url = $"/product-images/{productId}/{safeName}";
+                else
+                {
+                    var ext = Path.GetExtension(f.FileName);
+                    if (string.IsNullOrWhiteSpace(ext)) ext = ".jpg";
+
+                    var safeName = $"{Guid.NewGuid():N}{ext}";
+                    var fullPath = Path.Combine(rootDir, safeName);
+                    await using (var stream = System.IO.File.Create(fullPath))
+                    {
+                        await f.CopyToAsync(stream);
+                    }
+                    url = $"/product-images/{productId}/{safeName}";
+                }
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "Upload ảnh thất bại.",
+                    detail = ex.Message
+                });
             }
             var isMain = mainIndex.HasValue && i == mainIndex.Value;
 
